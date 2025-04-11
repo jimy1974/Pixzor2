@@ -1,2 +1,27 @@
 .env 
-pixzor-storage-key.json 
+
+# Node.js dependencies
+node_modules/
+uploads/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Environment Variables
+.env
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Optional: Other files/folders to ignore
+dist/
+build/
+
+stripe.exe
+
+# Ignore personal images
+public\images\generated
+chats
