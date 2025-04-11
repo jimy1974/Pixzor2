@@ -1,0 +1,22 @@
+<!-- views/partials/chat-tab.ejs -->
+<div>
+    
+    <div class="sub-content active" id="chat-talk">
+        <textarea id="chat-talk-input" class="w-full p-2 rounded bg-gray-800 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Describe what you want to create..."></textarea>
+        <button id="chat-submit" data-mode="chat-talk" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors ml-2">Send</button>
+    </div>
+    
+    <!-- New: Create Images Content Area (Initially Hidden by CSS via .sub-content) -->
+    <div class="sub-content" id="create-images-content">
+        <textarea id="image-input" class="w-full p-2 rounded bg-gray-800 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 resize-none" placeholder="Enter image prompt..." rows="2"></textarea>
+        <div class="flex flex-col ml-2">
+            <select id="aspect-ratio" class="p-2 rounded bg-gray-800 border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-green-500 text-sm mb-1">
+                <option value="1:1" selected>1:1 (Square)</option>
+                <option value="16:9">16:9 (Wide)</option>
+                <option value="9:16">9:16 (Tall)</option>
+            </select>
+            <button id="image-submit" data-mode="create-images" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors">Generate Image</button>
+        </div>
+    </div>
+   
+</div>

@@ -1,0 +1,68 @@
+.chat-box {
+    position: fixed; 
+    bottom: 20px;
+    right: 20px;
+    background: #fff;
+    padding: 10px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+#chat-input {
+    width: 200px;
+    margin-right: 10px;
+}
+
+#chat-submit {
+    padding: 5px 10px;
+}
+
+.spinner {
+    border: 3px solid rgba(255, 255, 255, 0.2);
+    border-top: 3px solid #fff;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+    margin-left: 8px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.generated-image-container img.generated-image {
+    display: block;
+    margin-top: 5px;
+}
+
+.chat-message.bot-message {
+    background: #f0f0f0;
+    padding: 8px;
+    border-radius: 4px;
+    margin: 4px 0;
+}
+
+#image-list {
+  overflow: hidden !important;
+}
+
+/* Add styles for auto-resizing textarea */
+textarea#image-input {
+    min-height: 50px; /* Roughly 2 lines */
+    max-height: 200px; /* Limit max expansion */
+    overflow-y: auto; /* Add scrollbar if max-height is reached */
+    resize: vertical; /* Allow manual vertical resize if needed, though auto-resize should work */
+}
+
+/* Optional: Style the dropdown slightly */
+#aspect-ratio {
+    appearance: none; /* Remove default OS styling */
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="white" class="bi bi-chevron-down" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 1em;
+    padding-right: 2rem; /* Make space for the arrow */
+}

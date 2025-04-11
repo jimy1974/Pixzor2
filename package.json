@@ -1,0 +1,35 @@
+{
+  "dependencies": {
+    "@google-cloud/storage": "^7.16.0",
+    "@stellar/stellar-sdk": "^13.0.0",
+    "axios": "^1.7.7",
+    "bcrypt": "^5.1.1",
+    "connect-flash": "^0.1.1",
+    "cors": "^2.8.5",
+    "cross-fetch": "^4.1.0",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.10",
+    "ethers": "^6.13.4",
+    "express": "^4.21.1",
+    "express-ejs-layouts": "^2.5.1",
+    "express-session": "^1.18.1",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.14.0",
+    "node-fetch": "^2.7.0",
+    "openai": "^4.73.1",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "passport-local": "^1.0.0",
+    "sequelize": "^6.37.6",
+    "sharp": "^0.33.5",
+    "stellar-sdk": "^9.1.0",
+    "stripe": "^17.4.0",
+    "together-ai": "^0.13.0"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}

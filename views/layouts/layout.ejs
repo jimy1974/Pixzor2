@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= locals.title || 'Pixzor' %></title>
+    <meta name="description" content="<%= locals.description || 'Create AI movies, images, and chat with Pixzor' %>">
+    <meta name="keywords" content="AI movies, image generation, chatbot, <%= locals.title || 'Pixzor' %>">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="preload" href="/js/chat-tab.js" as="script">
+    <link rel="preload" href="/js/create-tab.js" as="script">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://js.stripe.com/v3/"></script>
+    <!-- Include imagesLoaded and Masonry via CDN -->
+    <script src="https://unpkg.com/imagesloaded@5/imagesloaded.pkgd.min.js"></script>
+    <script src="https://unpkg.com/masonry-layout@4/dist/masonry.pkgd.min.js"></script>
+<style>
+    .topbar { position: fixed; top: 0; left: 60px; right: 0; background: #374151; padding: 10px 20px; z-index: 40; }
+    .sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 60px; background: #1f2937; padding: 15px 0; display: flex; flex-direction: column; align-items: center; }
+    .sidebar-item { color: #d1d5db; padding: 15px; cursor: pointer; }
+    .sidebar-item:hover, .sidebar-item.active { color: #15803d; }
+    .content-area { 
+        margin-left: 60px; margin-top: 60px; margin-bottom: 150px; width: calc(100% - 60px); background: #1f2937;
+        padding: 15px; border-radius: 8px; overflow-y: auto; display: flex;
+        flex-direction: column; gap: 10px; }
+    .content-item { margin-bottom: 10px; }
+    .thumbnail { max-width: 150px; height: auto; border-radius: 4px; cursor: pointer; }
+    .chat-message { padding: 10px; border-radius: 4px; margin-bottom: 10px; max-width: 70%; }
+    .chat-message.user { background: #4b5563; margin-left: auto; align-self: flex-end; }
+    .chat-message.bot-message { background: #374151; margin-right: auto; }
+    .chat-box { 
+        position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 100%; max-width: 80%; 
+        background: #1f2937; padding: 15px; border-radius: 16px; box-shadow: 0 0 15px rgba(0, 0, 0, 0.5); z-index: 30; border: none; }
+    .chat-tabs { display: flex; gap: 6px; margin-bottom: 10px; border: none; }
+    .chat-tab { flex: 1; padding: 4px; text-align: center; cursor: pointer; background: #374151; color: #d1d5db; 
+        transition: background 0.2s; border-radius: 12px; border: none; }
+    .chat-tab:hover { background: #4b5563; }
+    .chat-tab.active { background: #15803d; color: white; }
+    .tab-label { display: inline; }
+    .tab-label.short-label { display: none; }
+    .chat-content { display: none; }
+    .chat-content.active { display: block; }
+    .sub-tabs { display: flex; border-bottom: 1px solid #4b5563; margin-bottom: 10px; }
+    .sub-tab { flex: 1; padding: 4px; text-align: center; cursor: pointer; background: #374151; color: #d1d5db; 
+        border-radius: 8px; margin: 0 2px; transition: background 0.2s; }
+    .sub-tab:hover { background: #4b5563; }
+    .sub-tab.active { background: #22c55e; color: white; }
+    .sub-content { display: none; }
+    .sub-content.active { display: flex; align-items: center; gap: 10px; }
+    .sub-content input, .sub-content textarea { flex: 1; border-radius: 12px; background: #4b5563; color: #d1d5db; 
+        padding: 8px; border: none; }
+    #chat-submit { background: #15803d; color: white; padding: 5px 15px; border-radius: 12px; transition: background 0.2s; }
+    #chat-submit:hover { background: #16a34a; }
+    .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 50; display: none; justify-content: center; align-items: center; }
+    .modal.active { display: flex; }
+    .modal-backdrop { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); }
+    .modal-content { position: relative; z-index: 51; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 15px rgba(0, 0, 0, 0.5); }
+    .typing { color: #888; font-style: italic; }
+    .chat-message.bot-message ol { margin: 0; padding-left: 20px; color: #d1d5db; }
+    .chat-message.bot-message li { margin-bottom: 5px; }
+    /* Image loading placeholder */
+    .image-loading { background: #4b5563; width: 150px; height: 150px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #d1d5db; font-style: italic; }
+    /* Modal for enlarged image */
+    .image-modal img { max-width: 90vw; max-height: 90vh; }
+    @media (max-width: 600px) {
+        .thumbnail, .image-loading { max-width: 80px; height: auto; }
+        .chat-box { left: 60px; transform: none; max-width: calc(100% - 60px); }
+        .tab-label.full-label { display: none; }
+        .tab-label.short-label { display: inline; }
+        .sidebar-item { padding: 8px; }
+    }
+    /* Gallery CSS */
+    #image-list {
+        width: 100%;
+        margin: 0 auto;
+        position: relative;
+    }
+
+    .grid-sizer,
+    .image-card {
+        width: calc(33.333% - 10px);
+        margin-bottom: 10px;
+    }
+
+    .image-card {
+        float: left;
+        margin-right: 10px;
+    }
+
+    .image-card img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: 0.5rem;
+        transition: transform 0.2s ease-in-out;
+    }
+
+    .image-card:hover img {
+        transform: scale(1.02);
+    }
+
+    .like-button {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(0, 0, 0, 0.5);
+        border: none;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .like-button:hover {
+        background: rgba(0, 0, 0, 0.7);
+    }
+
+    .like-button i {
+        color: white;
+        font-size: 1.2rem;
+    }
+
+    .like-button i.liked {
+        color: #ef4444;
+    }
+
+    /* Modal CSS */
+    #comments-modal {
+        background-color: rgba(0, 0, 0, 0.75);
+    }
+
+    #comments-modal .bg-white {
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    #modal-image {
+        max-height: 70vh;
+        object-fit: contain;
+    }
+
+    #modal-prompt-container {
+        max-height: 100px;
+        overflow-y: auto;
+    }
+
+    #comments-list {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 1024px) {
+        .grid-sizer,
+        .image-card {
+            width: calc(50% - 10px);
+        }
+    }
+
+    @media (max-width: 640px) {
+        .grid-sizer,
+        .image-card {
+            width: calc(100% - 10px);
+        }
+    }
+
+    @media (max-width: 768px) {
+        #comments-modal .bg-white {
+            flex-direction: column;
+        }
+
+        #comments-modal .md\:w-2\/3,
+        #comments-modal .md\:w-1\/3 {
+            width: 100%;
+        }
+    }
+
+    /* Fullscreen Modal */
+    #fullscreen-modal {
+        background-color: rgba(0, 0, 0, 0.9);
+    }
+
+    #fullscreen-image {
+        max-width: 90vw;
+        max-height: 90vh;
+        object-fit: contain;
+    }
+
+    /* Add hover effect for chat history items */
+    .content-item.chat-message[data-chat-id]:hover {
+        cursor: pointer;
+        background-color: #4a5568; /* Equivalent to Tailwind bg-gray-700 */ 
+    }
+
+    /* Toast Styles */
+    #toast-container {
+        position: fixed;
+        top: 20px; /* Adjust as needed */
+        right: 20px; /* Adjust as needed */
+        z-index: 1000; /* Ensure it's above other elements */
+        width: 300px; /* Max width */
+    }
+    .toast-info {
+        background-color: #3b82f6; /* Tailwind bg-blue-500 */
+    }
+    .toast-success {
+        background-color: #22c55e; /* Tailwind bg-green-500 */
+    }
+    .toast-error {
+        background-color: #ef4444; /* Tailwind bg-red-500 */
+    }
+    .toast-warning {
+         background-color: #f59e0b; /* Tailwind bg-amber-500 */
+    }
+    /* Common toast styles from core.js */
+    #toast-container > div {
+        padding: 1rem; 
+        margin-bottom: 1rem; 
+        border-radius: 0.5rem; 
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); 
+        color: white; 
+        display: flex; 
+        align-items: center; 
+        justify-content: space-between; 
+        max-width: 100%; /* Ensure it fits container */
+    }
+     #toast-container > div button {
+         margin-left: 1rem;
+         color: white;
+         background: none;
+         border: none;
+         font-size: 1.2em;
+         line-height: 1;
+         cursor: pointer;
+         opacity: 0.7;
+         transition: opacity 0.2s;
+     }
+     #toast-container > div button:hover {
+          opacity: 1;
+     }
+</style>
+</head>
+<body class="bg-gray-900 text-white">
+    <!-- Toast Container should be outside main content, maybe near body end -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 space-y-2"></div>
+    
+    <!-- Top Bar -->
+    <header class="topbar">
+        <div class="container mx-auto flex justify-end items-center">
+            <button id="tokens-button" class="flex items-center bg-gray-600 hover:bg-yellow-600 px-4 py-2 rounded-lg text-base mr-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-yellow-400 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                    <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM10 18a8 8 0 100-16 8 8 0 000 16z" clip-rule="evenodd" />
+                </svg>
+                <span id="token-count" class="text-yellow-400">100 Tokens</span>
+            </button>
+            <button id="google-auth-button" class="flex items-center bg-gray-600 hover:bg-green-600 px-4 py-2 rounded-lg text-base">
+                <div class="w-5 h-5 mr-2 rounded-full bg-gray-500 flex items-center justify-center">
+                    <i class="fas fa-user text-white text-sm"></i>
+                </div>
+                <span id="auth-text">Login</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-item active" data-section="home" title="Home">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+        </div>
+        <div class="sidebar-item" data-section="files" title="Files">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+            </svg>
+        </div>
+        <div class="sidebar-item" data-section="chat-history" title="Chat History">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16h6m-7 4h8a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+        </div>
+        <div class="sidebar-item" data-section="gallery" title="Gallery">
+            <i class="fas fa-images h-6 w-6"></i>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="p-4 flex flex-col flex-1 overflow-hidden">
+        <div id="content-area" class="content-area flex-1 overflow-y-auto">
+            <div id="chat-messages" class="flex-1 overflow-y-auto">
+                <%- body %>
+            </div>
+            <!-- Removed Storyboard -->
+        </div>
+        <% if (locals.includeChat) { %>
+            <div class="chat-box" id="chat-box">
+                <div class="chat-tabs flex gap-2 mb-2">
+                    <div class="chat-tab flex-1 p-2 text-center cursor-pointer bg-gray-700 hover:bg-gray-600 transition-colors active" data-tab="chat">
+                        <svg class="w-5 h-5 inline-block mr-1" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 12h-2v-2h2v2zm0-4h-2V6h2v4z"/>
+                        </svg>
+                        <span class="tab-label full-label">Chat</span>
+                    </div>
+                    <div class="chat-tab flex-1 p-2 text-center cursor-pointer bg-gray-700 hover:bg-gray-600 transition-colors" data-tab="create-images">
+                        <svg class="w-5 h-5 inline-block mr-1" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7l3.5-4.5 2.5 3.5 4-4.5 3 4.5H14z"/>
+                        </svg>
+                        <span class="tab-label full-label">Create Images</span>
+                        <span class="tab-label short-label">Images</span>
+                    </div>
+                    <div class="chat-tab flex-1 p-2 text-center cursor-pointer bg-gray-700 hover:bg-gray-600 transition-colors" data-tab="create-videos">
+                        <svg class="w-5 h-5 inline-block mr-1" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/>
+                        </svg>
+                        <span class="tab-label full-label">Create Videos</span>
+                        <span class="tab-label short-label">Videos</span>
+                    </div>
+                </div>
+                <div id="chat-tab-content" class="flex-1 overflow-y-auto">
+                    <%- include('../partials/chat-tab') %>
+                </div>
+            </div>
+        <% } %>
+    </main>
+
+    <!-- Toast and Modals -->
+    <div id="modals-container">
+        <!-- Image Modal -->
+        <div id="image-modal" class="modal">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content">
+                <img id="enlarged-image" src="" alt="Enlarged Image">
+                <button class="absolute top-2 right-2 text-white bg-gray-600 hover:bg-gray-500 px-2 py-1 rounded">✕</button>
+            </div>
+        </div>
+        <!-- Comments Modal -->
+        <div id="comments-modal" class="fixed inset-0 bg-black bg-opacity-75 hidden z-40">
+            <div class="bg-white rounded-lg shadow-lg flex flex-col md:flex-row relative w-11/12 md:w-4/5 max-h-screen overflow-y-auto">
+                <!-- Close Button -->
+                <button id="close-comments-modal" class="absolute top-2 right-2 bg-gray-400 text-white hover:bg-green-300 rounded-full p-1 text-2xl z-30" aria-label="Close Comments Modal">
+                    ×
+                </button>
+
+                <!-- Left Section: Image -->
+                <div class="md:w-2/3 bg-gray-100 flex flex-col items-start p-4 relative">
+                    <button id="fullscreen-icon" class="absolute top-2 left-2 bg-black text-white p-1 rounded-full text-sm z-20" aria-label="Fullscreen Image">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                    <img id="modal-image" src="" alt="Full Image" class="w-full h-auto rounded-lg object-contain">
+                    <div class="w-full mt-4 space-y-2">
+                        <div id="model-container" class="flex flex-col hidden">
+                            <h3 class="text-sm font-semibold text-gray-700">Model</h3>
+                            <p id="modal-model" class="text-xs text-gray-500"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Section: Details and Comments -->
+                <div class="md:w-1/3 p-6 flex flex-col space-y-4">
+                    <!-- Prompt -->
+                    <div class="flex flex-col">
+                        <h3 class="text-lg font-bold text-black mb-2 flex items-center">
+                            Prompt
+                            <button id="copy-prompt" class="ml-2 text-gray-500 hover:text-gray-700" title="Copy Prompt" aria-label="Copy Prompt">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </h3>
+                        <div id="modal-prompt-container" class="border p-3 rounded max-h-24 overflow-y-auto bg-gray-50 relative">
+                            <p id="modal-prompt" class="text-gray-600 pr-8"></p>
+                        </div>
+                    </div>
+
+                    <!-- User Profile -->
+                    <div>
+                        <h3 class="text-lg font-bold text-black">Created By <span id="modal-username" class="text-blue-500"></span></h3>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex flex-wrap gap-2">
+                        <div class="relative group">
+                            <a id="download-button" href="#" class="bg-green-600 text-white p-2 rounded flex items-center" download>
+                                <i class="fas fa-download"></i>
+                            </a>
+                            <span class="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">Download</span>
+                        </div>
+                        <div id="delete-button-container" class="relative group hidden">
+                            <button id="delete-button-modal" class="bg-red-600 text-white p-2 rounded flex items-center" aria-label="Delete Content">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            <span class="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">Delete</span>
+                        </div>
+                        <div class="relative group">
+                            <a id="share-facebook" href="#" target="_blank" class="bg-blue-600 text-white p-2 rounded flex items-center" aria-label="Share on Facebook">
+                                <i class="fab fa-facebook-f"></i>
+                            </a>
+                            <span class="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">Facebook</span>
+                        </div>
+                        <div class="relative group">
+                            <a id="share-twitter" href="#" target="_blank" class="bg-blue-400 text-white p-2 rounded flex items-center" aria-label="Share on Twitter">
+                                <i class="fab fa-twitter"></i>
+                            </a>
+                            <span class="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">Twitter</span>
+                        </div>
+                        <div class="relative group">
+                            <a id="share-pinterest" href="#" target="_blank" class="bg-red-600 text-white p-2 rounded flex items-center" aria-label="Share on Pinterest">
+                                <i class="fab fa-pinterest-p"></i>
+                            </a>
+                            <span class="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">Pinterest</span>
+                        </div>
+                    </div>
+
+                    <!-- Comments Section -->
+                    <div class="flex flex-col flex-grow overflow-hidden">
+                        <h3 class="text-lg font-bold text-black mb-2">Comments</h3>
+                        <div class="flex-grow overflow-y-auto mb-4">
+                            <ul id="comments-list" class="space-y-2"></ul>
+                        </div>
+                        <div class="mt-auto">
+                            <textarea id="comment-input" placeholder="Login to comment" class="w-full p-2 border rounded text-black mb-2" aria-label="Write a comment" disabled></textarea>
+                            <button id="post-comment" class="w-full bg-green-600 text-white px-4 py-2 rounded" aria-label="Post Comment" disabled>Post Comment</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fullscreen Modal -->
+        <div id="fullscreen-modal" class="hidden fixed inset-0 bg-black bg-opacity-90 flex justify-center items-center z-50">
+            <div class="relative w-full h-full flex justify-center items-center">
+                <img id="fullscreen-image" src="" alt="Full Image" class="max-w-full max-h-full object-contain">
+                <button id="close-fullscreen-modal" class="absolute top-4 right-4 bg-red-500 hover:bg-red-600 text-white text-2xl px-3 py-1 rounded-full shadow-lg">
+                    ×
+                </button>
+            </div>
+        </div>
+
+        <!-- Include other modals from partial -->
+        <%- include('../partials/modals') %>
+
+    </div>
+
+    <script src="/js/core.js"></script>
+    <% if (locals.includeChat) { %>
+        <script src="/js/chat-tab.js"></script>
+    <% } %>
+    <script src="/js/create-tab.js" defer></script>
+    <!-- Load Gallery Script -->
+    <script src="/js/gallery.js" defer></script>
+</body>
+</html>

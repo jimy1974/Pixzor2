@@ -1,0 +1,170 @@
+<div class="container mx-auto px-4 py-8">
+    <% if (item) { %>
+        <h1 class="text-2xl md:text-3xl font-bold mb-6 text-center">Image Details</h1>
+
+        <div class="bg-gray-800 rounded-lg p-4 md:p-6 max-w-4xl mx-auto">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                <!-- Left Column: Image and Download -->
+                <div>
+                    <div class="relative mb-4">
+                         <img src="<%= item.contentUrl %>" alt="Image detail for <%= item.prompt.substring(0,50) %>..." class="w-full rounded-lg shadow-lg">
+                         <!-- Optional: Could add a fullscreen button here too, linking to the image URL directly or using JS -->
+                    </div>
+                    <a href="<%= item.contentUrl %>" download="pixzor_image_<%= item.id %>.jpg" 
+                       class="btn btn-primary w-full block text-center">
+                        <i class="fas fa-download mr-2"></i>Download
+                    </a>
+                </div>
+
+                <!-- Right Column: Details and Comments -->
+                <div>
+                    <!-- Prompt -->
+                    <div class="mb-4">
+                        <h3 class="text-lg font-semibold flex items-center mb-1">
+                            Prompt
+                            <% if (item.prompt) { %>
+                            <button data-prompt="<%= item.prompt %>" 
+                                    onclick="copyDataAttribute(this, 'prompt', 'Prompt')" 
+                                    class="ml-2 text-gray-400 hover:text-white" 
+                                    title="Copy Prompt">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                            <% } %>
+                        </h3>
+                        <p class="text-gray-300 bg-gray-700 p-3 rounded max-h-40 overflow-y-auto text-sm"><%= item.prompt || 'No prompt available.' %></p>
+                    </div>
+
+                    <!-- Created By -->
+                    <div class="mb-4">
+                        <h3 class="text-lg font-semibold mb-1">Created by</h3>
+                        <div class="flex items-center">
+                             <img src="<%= item.user?.photo || '/images/default-avatar.png' %>" alt="<%= item.user?.username || 'Unknown' %>" class="w-8 h-8 rounded-full mr-2">
+                             <p class="text-gray-300"><%= item.user?.username || 'Unknown' %></p>
+                        </div>
+                    </div>
+
+                    <!-- Model (if available) -->
+                    <% if (item.model) { %>
+                    <div class="mb-4">
+                        <h3 class="text-lg font-semibold mb-1">Model</h3>
+                        <p class="text-gray-300"><%= item.model %></p>
+                    </div>
+                    <% } %>
+
+                    <!-- Comments -->
+                    <div class="mb-4">
+                        <h3 class="text-lg font-semibold mb-1">Comments (<%= item.comments?.length || 0 %>)</h3>
+                        <ul id="static-comments-list" class="space-y-3 max-h-60 overflow-y-auto border border-gray-600 p-3 rounded bg-gray-700/50">
+                            <% if (item.comments && item.comments.length > 0) { %>
+                                <% item.comments.forEach(comment => { %>
+                                    <li class="comment-item border-b border-gray-600 pb-2 last:border-b-0">
+                                        <div class="flex items-center mb-1">
+                                            <img src="<%= comment.user?.photo || '/images/default-avatar.png' %>" alt="<%= comment.user?.username || 'Unknown' %>" class="w-6 h-6 rounded-full mr-2">
+                                            <span class="font-semibold text-sm mr-2"><%= comment.user?.username || 'Unknown' %></span>
+                                            <span class="text-gray-400 text-xs"><%= new Date(comment.createdAt).toLocaleString() %></span>
+                                        </div>
+                                        <p class="text-gray-300 text-sm break-words ml-8"><%- comment.commentText %></p>
+                                    </li>
+                                <% }) %>
+                            <% } else { %>
+                                <li class="text-gray-400 italic">No comments yet.</li>
+                            <% } %>
+                        </ul>
+                    </div>
+
+                    <!-- Post Comment Form (Only if logged in) -->
+                    <% if (user) { %>
+                        <form id="post-comment-form" 
+                              data-content-id="<%= item.id %>" 
+                              action="/api/content/<%= item.id %>/comments" 
+                              method="POST" 
+                              class="mt-4">
+                            <input type="hidden" name="_csrf" value="YOUR_CSRF_TOKEN"> <!-- IMPORTANT: Add CSRF token if you use csurf -->
+                            <textarea name="commentText" placeholder="Write a comment..." 
+                                   class="w-full p-2 border rounded bg-gray-700 text-white mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required></textarea>
+                            <button type="submit" class="btn btn-primary w-full">Post Comment</button>
+                        </form>
+                    <% } else { %>
+                        <p class="text-center text-gray-400 mt-4">Please <a href="/auth/google" class="text-blue-400 hover:underline">log in</a> to post a comment.</p>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    <% } else { %>
+        <p class="text-center text-red-500">Could not load image details.</p>
+    <% } %>
+</div>
+
+<% /* Client-side script for copy-to-clipboard and potentially comment form handling */ %>
+<script>
+    // New function to copy text from a data attribute
+    function copyDataAttribute(buttonElement, attributeName, type) {
+        const textToCopy = buttonElement.dataset[attributeName];
+        if (!textToCopy) {
+            console.error(`Data attribute 'data-${attributeName}' not found or empty.`);
+            showToast(`Could not copy ${type} (data missing).`, 'error');
+            return;
+        }
+
+        navigator.clipboard.writeText(textToCopy)
+            .then(() => {
+                showToast(`${type} copied to clipboard!`, 'success'); // Assuming showToast is global
+            })
+            .catch(err => {
+                console.error(`Failed to copy ${type}:`, err);
+                showToast(`Could not copy ${type}.`, 'error');
+            });
+    }
+
+    // Optional: Client-side handling for the comment form submission for smoother UX
+    const commentForm = document.getElementById('post-comment-form');
+    if (commentForm) {
+        commentForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(commentForm);
+            const commentText = formData.get('commentText');
+            const contentId = commentForm.dataset.contentId;
+
+            if (!commentText || !contentId) {
+                console.error('Missing comment text or content ID');
+                return;
+            }
+
+            const submitButton = commentForm.querySelector('button[type="submit"]');
+            const originalButtonText = submitButton.textContent;
+            submitButton.disabled = true;
+            submitButton.textContent = 'Posting...';
+
+            try {
+                const response = await fetch(`/api/content/${contentId}/comments`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // Add CSRF token header if needed, e.g., 'CSRF-Token': YOUR_CSRF_TOKEN_VALUE
+                    },
+                    body: JSON.stringify({ commentText: commentText })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'Failed to post comment');
+                }
+
+                showToast('Comment posted!', 'success');
+                // Optionally, dynamically add the new comment to the list above without full reload
+                // Or just clear the textarea
+                commentForm.querySelector('textarea').value = '';
+                // Consider reloading the comments section or the whole page for simplicity
+                 window.location.reload(); // Simple reload to show the new comment
+
+            } catch (error) {
+                console.error('Error posting comment:', error);
+                showToast(`Error: ${error.message}`, 'error');
+            } finally {
+                submitButton.disabled = false;
+                submitButton.textContent = originalButtonText;
+            }
+        });
+    }
+</script> 

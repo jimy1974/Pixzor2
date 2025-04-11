@@ -1,0 +1,38 @@
+<!-- views/gallery.ejs -->
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold mb-6 text-center">Gallery</h1>
+
+    <!-- Masonry Container -->
+    <div id="image-list" class="mx-auto">
+        <!-- .grid-sizer is required for fluid Masonry column width -->
+        <div class="grid-sizer"></div>
+        <!-- Image cards will be loaded here by JavaScript -->
+    </div>
+
+    <!-- Loading indicator -->
+    <div id="loading-indicator" class="text-center py-4" style="display: none;">
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+        <span class="ml-2">Loading more...</span>
+    </div>
+</div>
+
+<!-- Comments Modal (MOVED TO partials/modals.ejs) -->
+
+<!-- Fullscreen Modal (This specific instance might be redundant if one exists globally) -->
+<!-- Check if the one in partials/modals.ejs is sufficient -->
+<!-- 
+<div id="fullscreen-modal" class="fixed inset-0 bg-black hidden z-50">
+    <div class="absolute inset-0 flex items-center justify-center">
+        <img id="fullscreen-image" src="" alt="Fullscreen Image" class="max-h-screen max-w-screen">
+        <button onclick="closeFullscreenModal()" 
+                class="absolute top-4 right-4 text-white hover:text-gray-300">
+            <i class="fas fa-times text-2xl"></i>
+        </button>
+    </div>
+</div>
+-->
+
+<!-- Include required scripts -->
+<script src="https://unpkg.com/masonry-layout@4/dist/masonry.pkgd.min.js"></script>
+<script src="https://unpkg.com/imagesloaded@5/imagesloaded.pkgd.min.js"></script>
+<script src="/js/gallery.js" defer></script> 

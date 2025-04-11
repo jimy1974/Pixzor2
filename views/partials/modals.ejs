@@ -1,0 +1,179 @@
+<!-- views/partials/_modals.ejsfunction openFullscreenModal(imageUrl) {
+    // ... logs ...
+    const modal = document.getElementById('fullscreen-modal'); // Needs ID 'fullscreen-modal'
+    const img = document.getElementById('fullscreen-image'); // Needs ID 'fullscreen-image'
+    // ... logs ...
+    if (modal && img) {
+        img.src = imageUrl;
+        modal.classList.remove('hidden');
+        // ... log ...
+    } else {
+        console.error('[gallery.js] openFullscreenModal: Could not find modal or img element!');
+    }
+} -->
+
+<!-- BUY TOKENS MODAL -->
+<div id="buy-tokens-modal" class="modal">
+  <div class="modal-backdrop"></div>
+  <div class="modal-content w-full max-w-md mx-auto relative">
+    <button
+      id="close-buy-tokens-modal"
+      class="absolute top-2 right-2 text-gray-800 hover:text-gray-900"
+    >&times;</button>
+    <h2 class="text-xl font-bold mb-4 text-gray-900">Manage PIXZOR Tokens</h2>
+    <form id="buy-tokens-form" class="mb-6">
+      <label for="token-bundle" class="block mb-2 text-gray-800"
+        >Select a Token Bundle:</label
+      >
+      <select
+        id="token-bundle"
+        class="w-full border rounded-lg p-2 mb-4 text-gray-900"
+      >
+        <option value="300" data-price="3.00">300 Tokens - £3.00</option>
+        <option value="500" data-price="5.00">500 Tokens - £5.00</option>
+        <option value="1200" data-price="10.00">1,200 Tokens - £10.00</option>
+      </select>
+      <button
+        type="submit"
+        class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-500"
+      >
+        Purchase Tokens
+      </button>
+    </form>
+  </div>
+</div>
+<!-- WELCOME MODAL -->
+<div id="welcome-modal" class="modal">
+  <div class="modal-backdrop"></div>
+  <div class="modal-content w-full max-w-md mx-auto bg-gray-800 text-white relative">
+    <button
+      id="close-welcome-modal"
+      class="absolute top-2 right-2 text-gray-400 hover:text-gray-300 text-2xl"
+    >
+      &times;
+    </button>
+    <h2 class="text-xl font-bold mb-4">Welcome to Pixzor!</h2>
+    <p class="mb-4">
+      Register now to claim your <strong>50 free tokens</strong>...
+    </p>
+    <div class="flex justify-end space-x-4">
+      <button
+        id="close-welcome-modal-btn"
+        class="bg-gray-700 hover:bg-green-600 text-white px-4 py-2 rounded"
+      >
+        Close
+      </button>
+      <button
+        id="register-with-google"
+        class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded"
+      >
+        Register with Google
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ABOUT POPUP -->
+<div id="about-popup" class="modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content w-full max-w-md mx-auto relative" style="background: #1f2937; color: #d1d5db; padding: 24px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);">
+        <button id="close-about-popup" style="position: absolute; top: 12px; right: 12px; background: none; border: none; color: #9ca3af; font-size: 1.75rem; cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#9ca3af'">×</button>
+        <h2 style="color: #fff; font-size: 1.5rem; margin-bottom: 16px;">About Pixzor</h2>
+        <p style="color: #d1d5db; line-height: 1.5; margin-bottom: 16px;">Pixzor is an AI-powered platform designed to bring your creative ideas to life with cutting-edge tools.</p>
+        <footer style="background: #111827; padding: 16px; border-radius: 0 0 12px 12px; margin: 0 -24px -24px;">
+            <p style="color: #d1d5db; line-height: 1.5; margin-bottom: 0;">
+                By using Pixzor, you agree to our
+                <a id="terms-link" href="#" class="text-blue-400 hover:text-blue-300">Terms of Service</a>.
+            </p>
+        </footer>
+        <p style="color: #d1d5db; line-height: 1.5; margin: 16px 0;"> 
+            For inquiries:
+            <a href="mailto:contact@pixzor.com" class="text-blue-400 hover:text-blue-300">contact@pixzor.com</a>
+        </p>
+        <button id="close-about-popup-btn" style="background: #dc2626; color: #fff; padding: 8px 16px; border-radius: 6px; transition: background 0.2s; display: block; margin: 0 auto;" onmouseover="this.style.background='#ef4444'" onmouseout="this.style.background='#dc2626'">Close</button>
+    </div>
+</div>
+
+<!-- FULLSCREEN IMAGE MODAL -->
+<div id="fullscreen-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 hidden" onclick="closeFullscreenModal()">
+  <button
+    class="absolute top-4 right-6 text-white text-4xl font-bold hover:text-gray-300 z-[51]"
+    onclick="event.stopPropagation(); closeFullscreenModal();"
+  >&times;</button>
+  <div class="relative max-w-full max-h-full p-4" onclick="event.stopPropagation();">
+    <img id="fullscreen-image" src="" alt="Fullscreen Image" class="block max-w-full max-h-[90vh] object-contain">
+  </div>
+</div>
+
+<!-- COMMENTS/DETAILS MODAL (Moved from gallery.ejs) -->
+<div id="comments-modal" class="fixed inset-0 bg-black bg-opacity-75 hidden z-40">
+    <div class="container mx-auto px-4 py-8">
+        <div class="bg-gray-800 rounded-lg p-6 max-w-4xl mx-auto relative">
+            <div class="flex justify-between items-start mb-4">
+                <h2 class="text-2xl font-bold">Details</h2> <!-- Changed title to be generic -->
+                <button id="close-comments-modal" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <div class="relative">
+                         <img id="modal-image" src="" alt="Modal Image" class="w-full rounded-lg">
+                         <button id="fullscreen-icon" class="absolute top-2 left-2 bg-black bg-opacity-50 text-white p-1 rounded-full text-xs hover:bg-opacity-75 z-10" title="View Fullscreen">
+                            <i class="fas fa-expand"></i>
+                         </button>
+                    </div>
+                    <div class="mt-4">
+                        <a id="download-button" href="#" download class="btn btn-primary w-full">
+                            <i class="fas fa-download mr-2"></i>Download
+                        </a>
+                    </div>
+                </div>
+                <div>
+                    <div class="mb-4">
+                        <h3 class="font-bold flex items-center">
+                            Prompt:
+                            <button id="copy-prompt" class="ml-2 text-gray-400 hover:text-white" title="Copy Prompt">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </h3>
+                        <p id="modal-prompt" class="text-gray-300 bg-gray-700 p-2 rounded max-h-20 overflow-y-auto"></p>
+                    </div>
+                    <div class="mb-4">
+                        <h3 class="font-bold">Created by:</h3>
+                        <p id="modal-username" class="text-gray-300"></p>
+                    </div>
+                    <div id="model-container" class="mb-4 hidden">
+                        <h3 class="font-bold">Model:</h3>
+                        <p id="modal-model" class="text-gray-300"></p>
+                    </div>
+                    <div class="flex space-x-2 mb-4">
+                        <div id="delete-button-container" class="flex-1 hidden">
+                            <button id="delete-button-modal" class="btn btn-danger w-full">
+                                <i class="fas fa-trash mr-2"></i>Delete
+                            </button>
+                        </div>
+                        <div id="share-button-container" class="flex-1 hidden">
+                            <button id="share-button-modal" class="btn btn-secondary w-full">
+                                <i class="fas fa-share-alt mr-2"></i>Share
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <h3 class="font-bold">Comments:</h3>
+                        <ul id="comments-list" class="space-y-2 max-h-40 overflow-y-auto border border-gray-600 p-2 rounded"></ul>
+                    </div>
+                    <div class="flex space-x-2">
+                        <input type="text" id="comment-input" placeholder="Login to comment..." 
+                               class="flex-1 bg-gray-700 rounded px-4 py-2" disabled>
+                        <button id="post-comment" 
+                                class="btn btn-primary disabled:opacity-50" disabled>
+                            Post
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- END COMMENTS/DETAILS MODAL -->

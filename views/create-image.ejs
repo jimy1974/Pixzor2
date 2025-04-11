@@ -1,0 +1,11 @@
+<!-- views/create-image.ejs -->
+<section class="p-6 max-w-2xl mx-auto">
+    <h1 class="text-2xl font-bold text-green-400 mb-4"><%= title %></h1>
+    <form action="/create-image" method="POST" class="space-y-4">
+        <div>
+            <label for="prompt-input" class="block text-gray-300 mb-2">Your Prompt:</label>
+            <textarea name="prompt" id="prompt-input" class="w-full p-2 rounded bg-gray-800 border border-gray-600 text-white" rows="3" placeholder="Describe your image..."><%= prompt %></textarea>
+        </div>
+        <button type="submit" class="bg-green-700 hover:bg-green-600 px-4 py-2 rounded text-white">Generate</button>
+    </form>
+</section>
