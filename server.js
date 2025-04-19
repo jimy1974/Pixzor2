@@ -11,6 +11,9 @@ const Together = require('together-ai');
 const fetch = require('node-fetch');
 const { Op } = require('sequelize');
 const routes = require('./routes');
+// --- Image Upload Deps ---
+const multer = require('multer');
+const sharp = require('sharp');
 // --- Stripe Requirement ---
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
@@ -156,6 +159,26 @@ app.use('/videos', express.static(path.join(__dirname, 'public', 'videos')));
 const generatedImagesPath = path.join(__dirname, 'public', 'images', 'generated');
 fs.mkdir(generatedImagesPath, { recursive: true }).catch(console.error);
 app.use('/images/generated', express.static(generatedImagesPath));
+
+// --- Setup Upload Directory for Img2Img ---
+const UPLOAD_DIR = path.join(__dirname, 'public', 'uploads');
+fs.mkdir(UPLOAD_DIR, { recursive: true }).catch(err => console.error('Error creating upload directory:', err));
+app.use('/uploads', express.static(UPLOAD_DIR)); // Serve uploaded files
+
+// --- Multer Configuration (for Img2Img) ---
+const uploadMemoryStorage = multer.memoryStorage(); // Store file in memory
+const upload = multer({ 
+    storage: uploadMemoryStorage,
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+    fileFilter: (req, file, cb) => {
+        // Basic MIME type check
+        if (file.mimetype === 'image/jpeg' || file.mimetype === 'image/png') {
+            cb(null, true);
+        } else {
+            cb(new Error('Only JPEG or PNG images are allowed.'), false);
+        }
+    }
+});
 
 // View engine setup
 app.set('views', path.join(__dirname, 'views'));
@@ -556,6 +579,93 @@ app.post('/api/content/:id/like', (req, res) => {
 app.get('/partials/create-images', (req, res) => {
     res.render('partials/create-images', { layout: false }); // Render without the main layout
 });
+
+// --- NEW: Image Upload Route (for Img2Img) ---
+app.post('/api/upload-image', isAuthenticated, upload.single('image'), async (req, res) => { // Added isAuthenticated middleware
+    console.log('[Upload API] Received request.');
+
+    if (!req.file) {
+        console.log('[Upload API] Error: No image file provided in request.');
+        return res.status(400).json({ error: 'No image file uploaded.' });
+    }
+
+    const imageBuffer = req.file.buffer;
+    console.log(`[Upload API] Received image buffer, size: ${req.file.size} bytes, mimetype: ${req.file.mimetype}`);
+
+    try {
+        // Get metadata
+        const metadata = await sharp(imageBuffer).metadata();
+        console.log(`[Upload API] Original image: ${metadata.width}x${metadata.height}, format: ${metadata.format}`);
+
+        // Format validation (already partially done by multer fileFilter, but good to double-check)
+        if (!['jpeg', 'png', 'jpg'].includes(metadata.format?.toLowerCase())) { // Added jpg, handle potential undefined format
+            console.log(`[Upload API] Error: Unsupported format detected by sharp: ${metadata.format}`);
+            return res.status(400).json({ error: 'Only JPEG or PNG images are supported.' });
+        }
+
+        // Calculate target dimensions (max 512, aspect ratio preserved, divisible by 16)
+        const aspectRatio = metadata.width / metadata.height;
+        let targetWidth, targetHeight;
+        const maxDimension = 512;
+        if (metadata.width > metadata.height) {
+            targetWidth = maxDimension;
+            targetHeight = Math.round(maxDimension / aspectRatio);
+        } else {
+            targetHeight = maxDimension;
+            targetWidth = Math.round(maxDimension * aspectRatio);
+        }
+        // Ensure dimensions are divisible by 16
+        targetWidth = Math.max(16, Math.round(targetWidth / 16) * 16); // Ensure minimum of 16
+        targetHeight = Math.max(16, Math.round(targetHeight / 16) * 16); // Ensure minimum of 16
+        console.log(`[Upload API] Calculated target dimensions: ${targetWidth}x${targetHeight}`);
+
+        // Resize and convert to PNG (as per demo logic)
+        const resizedImageBuffer = await sharp(imageBuffer, { failOnError: false }) // failOnError: false might prevent some sharp errors
+            .resize({
+                width: targetWidth,
+                height: targetHeight,
+                fit: 'contain', // Use contain to avoid cropping, pad with white if needed
+                position: 'center',
+                background: { r: 255, g: 255, b: 255, alpha: 1 } // White background for padding
+            })
+            .png() // Force PNG output
+            .toBuffer();
+        console.log(`[Upload API] Image resized and converted to PNG, new buffer size: ${resizedImageBuffer.length}`);
+
+        // Save locally temporarily
+        const uniqueSuffix = Date.now() + '-' + Math.random().toString(36).substring(2, 8);
+        const filename = `upload-${uniqueSuffix}.png`;
+        const filePath = path.join(UPLOAD_DIR, filename);
+
+        await fs.writeFile(filePath, resizedImageBuffer);
+        const imageUrl = `/uploads/${filename}`; // Use relative URL
+        console.log(`[Upload API] Image saved locally to ${filePath}. URL: ${imageUrl}`);
+
+        // Schedule deletion after 10 minutes (adjust time as needed)
+        const deletionTimeout = 10 * 60 * 1000;
+        setTimeout(async () => {
+            try {
+                await fs.unlink(filePath);
+                console.log(`[Upload API] Automatically deleted temporary file: ${filePath}`);
+            } catch (error) {
+                // Log error but don't crash if deletion fails (e.g., file already gone)
+                console.warn(`[Upload API] Failed to delete temporary file ${filePath}: ${error.message}`);
+            }
+        }, deletionTimeout);
+
+        // Send back the URL and dimensions
+        res.json({ url: imageUrl, width: targetWidth, height: targetHeight });
+
+    } catch (error) {
+        console.error('[Upload API] Error processing image:', error);
+        // Check for specific sharp errors if needed
+        if (error.message.includes('Input buffer contains unsupported image format')) {
+             return res.status(400).json({ error: 'Unsupported image format.' });
+        }
+        res.status(500).json({ error: 'Image processing failed.', details: error.message });
+    }
+});
+// --- END Image Upload Route --- 
 
 // Route to serve the chat-tab partial
 app.get('/partials/chat-tab', (req, res) => {

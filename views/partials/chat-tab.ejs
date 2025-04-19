@@ -6,17 +6,344 @@
         <button id="chat-submit" data-mode="chat-talk" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors ml-2">Send</button>
     </div>
     
-    <!-- New: Create Images Content Area (Initially Hidden by CSS via .sub-content) -->
+    <!-- Modified: Create Images Content Area -->
     <div class="sub-content" id="create-images-content">
-        <textarea id="image-input" class="w-full p-2 rounded bg-gray-800 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 resize-none" placeholder="Enter image prompt..." rows="2"></textarea>
-        <div class="flex flex-col ml-2">
-            <select id="aspect-ratio" class="p-2 rounded bg-gray-800 border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-green-500 text-sm mb-1">
-                <option value="1:1" selected>1:1 (Square)</option>
-                <option value="16:9">16:9 (Wide)</option>
-                <option value="9:16">9:16 (Tall)</option>
-            </select>
-            <button id="image-submit" data-mode="create-images" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors">Generate Image</button>
+        <div class="flex items-start w-full gap-2">
+            
+            <!-- Img2Img Thumbnail Upload (Conditionally Hidden) -->
+            <div id="thumbnail-container" class="flex-shrink-0 relative"> <!-- Container for conditional hiding -->
+                <!-- Wrapper for icon overlay -->
+                <div id="thumbnail-wrapper" class="relative w-16 h-16 overflow-hidden rounded"> 
+                    <label for="image-upload-input" class="cursor-pointer block">
+                        <img id="image-upload-thumbnail" src="/images/placeholder.png" alt="Upload Image" class="w-full h-full object-contain border border-gray-600 hover:border-green-500 transition-colors bg-gray-700"> 
+                    </label>
+                    <!-- Placeholder Icon -->
+                    <div id="thumbnail-placeholder-icon" class="absolute inset-0 flex items-center justify-center text-gray-400 text-2xl pointer-events-none">
+                        <i class="fas fa-image"></i>
+                    </div>
+                    <input type="file" id="image-upload-input" accept="image/*" class="hidden">
+                    <button id="clear-image-upload" class="absolute top-0 right-0 -mt-1 -mr-1 bg-red-600 hover:bg-red-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hidden z-20" title="Clear Image"> 
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Prompt and Controls Container -->
+            <div class="flex-grow flex flex-col gap-2"> 
+                <!-- Prompt Input -->
+                <textarea id="image-input" class="w-full p-2 rounded bg-gray-800 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 resize-none text-sm" placeholder="Enter image prompt..." rows="2"></textarea>
+
+                <!-- Controls Row -->
+                <div class="flex flex-wrap items-center gap-2 text-xs"> 
+                    <!-- Aspect Ratio Dropdown -->
+                    <div class="relative inline-block text-left">
+                        <div id="aspect-ratio-dropdown" class="custom-dropdown cursor-pointer" data-value="1:1">
+                            <div class="selected-option inline-flex items-center justify-center w-full rounded border border-gray-600 shadow-sm px-2 py-1 bg-gray-700 text-xs font-medium text-white hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-green-500">
+                                <span id="selected-ratio-icon"><i class="fas fa-square"></i></span>
+                                <span id="selected-ratio-text" class="ml-1">1:1</span>
+                                <svg class="-mr-1 ml-1 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                        </div>
+                        <div id="aspect-ratio-options" class="dropdown-options origin-bottom-left absolute bottom-full left-0 mb-1 w-max-content rounded-md shadow-lg bg-gray-700 ring-1 ring-black ring-opacity-5 focus:outline-none hidden z-50" role="menu" aria-orientation="vertical" aria-labelledby="aspect-ratio-dropdown"> 
+                            <div class="py-1" role="none">
+                                <a href="#" class="aspect-ratio-option text-white block px-3 py-1 text-xs hover:bg-gray-600 hidden" role="menuitem" data-value="1:1" title="Square (1:1)"><i class="fas fa-square w-4 inline-block mr-1"></i> 1:1</a>
+                                <a href="#" class="aspect-ratio-option text-white block px-3 py-1 text-xs hover:bg-gray-600" role="menuitem" data-value="16:9" title="Wide (16:9)"><i class="fas fa-desktop w-4 inline-block mr-1"></i> 16:9</a>
+                                <a href="#" class="aspect-ratio-option text-white block px-3 py-1 text-xs hover:bg-gray-600" role="menuitem" data-value="9:16" title="Tall (9:16)"><i class="fas fa-mobile-alt w-4 inline-block mr-1"></i> 9:16</a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- END: Aspect Ratio Dropdown -->
+                    
+                    <!-- NEW: Style Select -->
+                    <select id="style-select" class="custom-select text-xs" title="Select Style">
+                        <option value="" selected>Style: None</option>
+                        <option value="3d-model">Style: 3D Model</option>
+                        <option value="analog-film">Style: Analog Film</option>
+                        <option value="anime">Style: Anime</option>
+                        <option value="cinematic">Style: Cinematic</option>
+                        <option value="comic-book">Style: Comic Book</option>
+                        <option value="digital-art">Style: Digital Art</option>
+                        <option value="enhance">Style: Enhance</option>
+                        <option value="fantasy-art">Style: Fantasy Art</option>
+                        <option value="isometric">Style: Isometric</option>
+                        <option value="line-art">Style: Line Art</option>
+                        <option value="low-poly">Style: Low Poly</option>
+                        <option value="neon-punk">Style: Neon Punk</option>
+                        <option value="origami">Style: Origami</option>
+                        <option value="photographic">Style: Photographic</option>
+                        <option value="pixel-art">Style: Pixel Art</option>
+                        <option value="texture">Style: Texture</option>
+                        <option value="craft-clay">Style: Craft Clay</option>
+                    </select>
+                    <!-- END: Style Select -->
+
+                    <!-- NEW: Model Select -->
+                    <select id="model-select" class="custom-select text-xs" title="Select Model">
+                        <option value="FLUX.1 Schnell" data-cost="1" selected>Model: Schnell (1)</option>
+                        <option value="FLUX.1 Canny" data-cost="10">Model: Canny (10)</option>
+                        <option value="FLUX.1 Depth" data-cost="10">Model: Depth (10)</option>
+                        <option value="FLUX.1 Redux" data-cost="10">Model: Redux (10)</option>
+                    </select>
+                    <!-- END: Model Select -->
+
+                    <!-- NEW: Enhance Button -->
+                    <button id="enhance-button" class="custom-button px-2" title="Enhance Prompt">
+                        <i class="fas fa-magic"></i> 
+                    </button>
+                    <!-- END: Enhance Button -->
+
+                    <!-- NEW: Strength Slider (Initially hidden, shown when image is uploaded) -->
+                    <div id="strength-control" class="relative inline-block text-left hidden ml-2"> <!-- Add ml-2 for spacing -->
+                        <label for="image-strength-slider" class="block text-xs font-medium text-gray-300 mr-1">Strength:</label>
+                        <input type="range" id="image-strength-slider" min="0" max="1" step="0.05" value="0.85" class="w-20 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer range-sm align-middle">
+                        <span id="strength-value-display" class="text-xs text-gray-400 ml-1">0.85</span>
+                    </div>
+                    <!-- END: Strength Slider -->
+
+                    <!-- Generate Button -->
+                    <button id="image-submit" data-mode="create-images" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded transition-colors text-sm flex items-center gap-1 ml-auto"> 
+                        <span>Generate</span>
+                        <span id="token-cost-display">(?)</span> 
+                    </button>
+                </div>
+            </div>
+
         </div>
     </div>
    
 </div>
+
+<style>
+/* Add styles for the active aspect ratio button */
+.aspect-ratio-btn.active {
+    background-color: #15803d; /* green-700 */
+    box-shadow: 0 0 0 2px #22c55e; /* ring-green-500 */
+}
+/* Ensure Font Awesome 6 Pro icons display correctly if available */
+.fa-rectangle-wide, .fa-rectangle-portrait { 
+  font-family: 'Font Awesome 6 Pro'; 
+}
+/* Styles for the new dropdown */
+.custom-dropdown {
+    max-width: 100px; /* Adjust width as needed */
+}
+/* Styles for new elements */
+.custom-select {
+    background-color: #374151; /* bg-gray-700 */
+    color: white;
+    border: 1px solid #4b5563; /* border-gray-600 */
+    border-radius: 0.375rem; /* rounded-md */
+    padding: 0.25rem 1.75rem 0.25rem 0.5rem; /* py-1 pr-7 pl-2 */
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%239CA3AF' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1em;
+    cursor: pointer;
+}
+
+.custom-button {
+    background-color: #374151; /* bg-gray-700 */
+    color: white;
+    height: 28px; /* Match select height approx */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #4b5563; /* border-gray-600 */
+    border-radius: 0.375rem; /* rounded-md */
+    font-size: 0.75rem; /* text-xs */
+    padding: 0 0.5rem; /* px-2 */
+    transition: background-color 0.2s;
+    cursor: pointer;
+}
+
+.custom-button:hover {
+    background-color: #4b5563; /* hover:bg-gray-600 */
+}
+
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const imageUploadInput = document.getElementById('image-upload-input');
+    const thumbnail = document.getElementById('image-upload-thumbnail');
+    const clearButton = document.getElementById('clear-image-upload');
+    const thumbnailContainer = document.getElementById('thumbnail-container'); 
+    const placeholderIcon = document.getElementById('thumbnail-placeholder-icon'); 
+    
+    // NEW elements
+    const modelSelect = document.getElementById('model-select');
+    const styleSelect = document.getElementById('style-select'); 
+    const enhanceButton = document.getElementById('enhance-button'); 
+    const generateButton = document.getElementById('image-submit'); 
+    const tokenCostDisplay = document.getElementById('token-cost-display'); 
+    
+    // Dropdown elements
+    const dropdown = document.getElementById('aspect-ratio-dropdown');
+    const optionsContainer = document.getElementById('aspect-ratio-options');
+    const selectedIconSpan = document.getElementById('selected-ratio-icon');
+    const selectedRatioTextSpan = document.getElementById('selected-ratio-text'); 
+
+    // --- Helper Function --- 
+    function updateGenerateButtonCost() {
+        const selectedModelOption = modelSelect.options[modelSelect.selectedIndex];
+        const cost = selectedModelOption.dataset.cost || '1';
+        tokenCostDisplay.textContent = `(${cost})`;
+    }
+
+    function checkModelAndToggleThumbnail() {
+        const selectedModelValue = modelSelect.value;
+        if (selectedModelValue === 'FLUX.1 Schnell') {
+            thumbnailContainer.classList.add('hidden');
+        } else {
+            thumbnailContainer.classList.remove('hidden');
+        }
+    }
+    // --- End Helper Functions ---
+
+    // --- Initial Setup ---
+    updateGenerateButtonCost();
+    checkModelAndToggleThumbnail();
+    if (thumbnail.src.includes('placeholder.png')) {
+        placeholderIcon.classList.remove('hidden');
+    } else {
+        placeholderIcon.classList.add('hidden');
+    }
+    // --- End Initial Setup ---
+
+    // --- Event Listeners ---
+
+    // Model Change Listener
+    if (modelSelect) {
+        modelSelect.addEventListener('change', () => {
+            updateGenerateButtonCost();
+            checkModelAndToggleThumbnail();
+        });
+    }
+
+    // Image Upload Listener
+    if (imageUploadInput && thumbnail && clearButton && placeholderIcon && generateButton) { 
+        imageUploadInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file && file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    thumbnail.src = e.target.result;
+                    clearButton.classList.remove('hidden');
+                    placeholderIcon.classList.add('hidden'); 
+                }
+                reader.readAsDataURL(file);
+            } else {
+                thumbnail.src = '/images/placeholder.png'; 
+                clearButton.classList.add('hidden'); 
+                imageUploadInput.value = ''; 
+                placeholderIcon.classList.remove('hidden'); 
+            }
+        });
+
+        // Clear Button Listener
+        clearButton.addEventListener('click', () => {
+            thumbnail.src = '/images/placeholder.png'; 
+            clearButton.classList.add('hidden');    
+            imageUploadInput.value = '';           
+            placeholderIcon.classList.remove('hidden'); 
+        });
+    }
+
+    // Aspect Ratio Dropdown Logic
+    if (dropdown && optionsContainer && selectedIconSpan && selectedRatioTextSpan) {
+        // Toggle dropdown visibility
+        dropdown.addEventListener('click', () => {
+            optionsContainer.classList.toggle('hidden');
+        });
+
+        // Handle option selection
+        optionsContainer.addEventListener('click', (event) => {
+            const optionLink = event.target.closest('.aspect-ratio-option');
+            if (optionLink) {
+                event.preventDefault(); 
+                const newValue = optionLink.dataset.value;
+                const newIconHTML = optionLink.querySelector('i').outerHTML; 
+                const newText = optionLink.textContent.trim(); 
+
+                // Update the main dropdown button
+                dropdown.dataset.value = newValue; 
+                selectedIconSpan.innerHTML = newIconHTML;
+                selectedRatioTextSpan.textContent = newText; 
+                
+                // Hide the selected option, show others in the list
+                const allOptions = optionsContainer.querySelectorAll('.aspect-ratio-option');
+                allOptions.forEach(opt => {
+                    if (opt.dataset.value === newValue) {
+                        opt.classList.add('hidden');
+                    } else {
+                        opt.classList.remove('hidden');
+                    }
+                });
++
+                // Hide the options container
+                optionsContainer.classList.add('hidden');
+
+                // Log selection (for create-tab.js reference)
+                console.log('Selected Ratio (Dropdown):', newValue);
+            }
+        });
+
+        // Optional: Close dropdown when clicking outside
+        document.addEventListener('click', (event) => {
+            if (!dropdown.contains(event.target) && !optionsContainer.contains(event.target)) {
+                optionsContainer.classList.add('hidden');
+            }
+        });
+    }
+
+    // Enhance Button Listener (Example)
+    if (enhanceButton) {
+        enhanceButton.addEventListener('click', () => {
+            // Placeholder for enhance functionality - maybe call an API?
+            console.log('Enhance button clicked!');
+            window.showToast('Enhance functionality not yet implemented.', 'info');
+        });
+    }
+
+    // NEW: Strength Slider Update
+    const strengthSlider = document.getElementById('image-strength-slider');
+    const strengthValueDisplay = document.getElementById('strength-value-display');
+    if(strengthSlider && strengthValueDisplay) {
+        strengthSlider.addEventListener('input', () => {
+            strengthValueDisplay.textContent = strengthSlider.value;
+        });
+    }
+
+    // Function to update Generate button state and Strength visibility
+    function updateControlsBasedOnState() {
+        const modelValue = modelSelect.value;
+        const isSchnellModel = modelValue === 'FLUX.1 Schnell';
+        const hasUploadedImage = uploadedImageData !== null;
+        const hasPrompt = imageInput.value.trim().length > 0;
+
+        // Show strength slider only if an image is uploaded AND model supports img2img
+        if (hasUploadedImage && !isSchnellModel) {
+            strengthControl.classList.remove('hidden');
+        } else {
+            strengthControl.classList.add('hidden');
+        }
+
+        // Generate button disabled logic:
+        if (isSchnellModel) {
+            // For Schnell (text-to-image): Disable if no prompt
+            generateButton.disabled = !hasPrompt;
+        } else {
+            // For other models (image-to-image): Disable if no prompt OR no image
+            generateButton.disabled = !hasPrompt || !hasUploadedImage;
+        }
+        console.log(`[UpdateControls] Model: ${modelValue}, IsSchnell: ${isSchnellModel}, HasImage: ${hasUploadedImage}, HasPrompt: ${hasPrompt}, Generate Disabled: ${generateButton.disabled}`);
+    }
+
+    imageUploadInput.addEventListener('change', async () => {
+        // ... rest of the code remains the same ...
+    });
+});
+</script>
