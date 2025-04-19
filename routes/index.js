@@ -287,7 +287,7 @@ router.post('/api/generate-image', express.json(), async (req, res) => {
             }
             throw new Error(userMessage);
         }
-        const result = togetherResult || await togetherResponse.json();
+        let result = togetherResult || await togetherResponse.json();
         console.log('Together AI API Success:', result);
 
         if (!togetherResponse.ok) {
@@ -308,7 +308,7 @@ router.post('/api/generate-image', express.json(), async (req, res) => {
             throw new Error(userMessage);
         }
 
-        const result = await togetherResponse.json();
+        result = await togetherResponse.json();
         console.log('Together AI API Success:', result);
 
         if (!result.data || result.data.length === 0 || !result.data[0].url) {

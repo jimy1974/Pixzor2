@@ -24,4 +24,7 @@ stripe.exe
 
 # Ignore personal images
 public\images\generated
+
+public\images
+
 chats
