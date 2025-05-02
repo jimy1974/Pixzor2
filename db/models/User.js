@@ -17,9 +17,9 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING,
             allowNull: true,
         },
-        tokens: {
+        credits: {
             type: DataTypes.DECIMAL(10, 2),
-            defaultValue: 50.00,
+            defaultValue: 2.00,
         },
         googleId: {
             type: DataTypes.STRING,

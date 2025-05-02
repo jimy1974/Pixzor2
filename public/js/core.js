@@ -6,27 +6,105 @@ ws.onopen = () => console.log('WebSocket connected');
 ws.onerror = (error) => console.error('WebSocket error:', error);
 ws.onclose = (event) => console.log('WebSocket disconnected:', event.code, event.reason);
 
-window.sendChatMsg = (message) => {
-    if (message && ws.readyState === WebSocket.OPEN) {
-        const chatMessages = document.getElementById('chat-messages');
-        chatMessages.dataset.lastPrompt = message;
-        ws.send(JSON.stringify({ type: 'chat', message }));
+/**
+ * Sends a pre-formatted message object over the WebSocket.
+ * @param {object} messageObject The object to send (e.g., { type: 'chat', message: 'text', chatSessionId: '...' }).
+ */
+function sendChatMsg(messageObject) { // Parameter name changed for clarity
+    if (ws.readyState === WebSocket.OPEN) {
+        // Directly stringify the object passed in, as it should already have the correct structure
+        ws.send(JSON.stringify(messageObject)); 
+    } else {
+        console.error('WebSocket is not open. ReadyState:', ws.readyState);
+        showToast('Connection lost. Please refresh.', 'error');
     }
-};
+}
 
 ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
-    const chatMessages = document.getElementById('chat-messages');
+    const chatMessages = document.getElementById('chat-messages'); // Ensure this is the correct ID
 
-    if (data.type === 'chatChunk') {
-        let lastBotMessage = chatMessages.querySelector('.chat-message.bot-message:last-child:not(.image-loading)');
+    console.log('[WebSocket Received]', data); // Add log to see all incoming messages
+
+    // Remove status message before processing new chunks or results
+    const oldStatus = chatMessages?.querySelector('.chat-message.status');
+    if (oldStatus && data.type !== 'status') { // Don't remove if the new message IS a status
+        oldStatus.remove();
+    }
+
+    if (data.type === 'error') {
+        showToast(data.message, 'error');
+        // Remove status if error occurs
+        const statusMsg = chatMessages?.querySelector('.chat-message.status');
+        if (statusMsg) statusMsg.remove();
+    } else if (data.type === 'messageChunk' && data.sender === 'bot') {
+        let lastBotMessage = chatMessages.querySelector('.chat-message.bot-message:last-child:not(.image-message)');
+
+        // If no existing bot message div or the last one is an image, create a new one
         if (!lastBotMessage) {
             lastBotMessage = document.createElement('div');
             lastBotMessage.classList.add('chat-message', 'bot-message');
+            lastBotMessage.dataset.rawMarkdown = ''; // Initialize dataset
             chatMessages.appendChild(lastBotMessage);
         }
-        lastBotMessage.innerHTML += data.data;
+
+        // Initialize dataset if it doesn't exist (e.g., on first chunk)
+        if (lastBotMessage.dataset.rawMarkdown === undefined) {
+             lastBotMessage.dataset.rawMarkdown = '';
+        }
+
+        // Use data.message, not data.data
+        const chunkContent = data.message || '';
+        lastBotMessage.dataset.rawMarkdown += chunkContent;
+
+        // Parse and render markdown - ensure marked.js is loaded
+        if (typeof marked !== 'undefined') {
+            lastBotMessage.innerHTML = marked.parse(lastBotMessage.dataset.rawMarkdown, { sanitize: true, gfm: true, breaks: true });
+        } else {
+            console.warn('marked.js not found. Displaying raw text.');
+            // Fallback to textContent if marked is not available
+            // This might look odd if markdown comes in chunks, but better than nothing
+            lastBotMessage.textContent = lastBotMessage.dataset.rawMarkdown;
+        }
+
         chatMessages.scrollTop = chatMessages.scrollHeight;
+    } else if (data.type === 'chat' && data.sender === 'ai') {
+        const botDiv = document.createElement('div');
+        botDiv.classList.add('chat-message', 'bot-message'); 
+        // Parse markdown content - ensure marked.js is loaded globally
+        if (typeof marked !== 'undefined') {
+            botDiv.innerHTML = marked.parse(data.message || '', { sanitize: true, gfm: true, breaks: true });
+        } else {
+            console.warn('marked.js not found. Displaying raw text.');
+            botDiv.textContent = data.message || '';
+        }
+        chatMessages.appendChild(botDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    } else if (data.type === 'status') {
+        // Remove previous status first if any (redundant check, but safe)
+        const existingStatus = chatMessages.querySelector('.chat-message.status');
+        if (existingStatus) existingStatus.remove();
+        
+        const statusDiv = document.createElement('div');
+        statusDiv.classList.add('chat-message', 'status'); // Add 'status' class for easy selection
+        statusDiv.textContent = data.message || '...'; // Display the status text
+        chatMessages.appendChild(statusDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    } else if (data.type === 'imageResult') {
+        // --- Handle Image Generation Result --- 
+        const imageDiv = document.createElement('div');
+        imageDiv.classList.add('chat-message', 'bot-message', 'image-message'); // Add specific class
+        imageDiv.innerHTML = `
+            <p>Here is the image you requested:</p>
+            <img src="${data.imageUrl}" 
+                 class="generated-image" 
+                 alt="Generated Image" 
+                 style="max-width: 100%; height: auto; border-radius: 8px; margin-top: 8px;" 
+                 ${data.contentId ? `data-content-id="${data.contentId}"` : ''}>
+        `;
+        chatMessages.appendChild(imageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        // --- End handling image result ---
     } else if (data.type === 'chatEnd' && data.image) {
         const loadingDiv = chatMessages.querySelector('.image-loading');
         if (loadingDiv) loadingDiv.remove();
@@ -38,15 +116,6 @@ ws.onmessage = (event) => {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     } else if (data.type === 'SetTitle') {
         document.title = `${data.newTitle} | Pixzor`;
-    } else if (data.type === 'chatChunk' && !data.data.startsWith('#')) {
-        // Display user message only once via WebSocket
-        const userDiv = document.createElement('div');
-        userDiv.classList.add('chat-message', 'user');
-        userDiv.innerHTML = chatMessages.dataset.lastPrompt;
-        if (!chatMessages.querySelector(`.chat-message.user:last-child[innerHTML="${chatMessages.dataset.lastPrompt}"]`)) {
-            chatMessages.appendChild(userDiv);
-        }
-        chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 };
 
@@ -62,29 +131,40 @@ function showToast(message, type = 'info') {
     setTimeout(() => toast.remove(), 5000);
 }
 
-// User Authentication (unchanged)
+// User Authentication
 window.isLoggedIn = false;
-fetch('/user-data')
-    .then(response => response.json())
+
+// First check if we're logged in
+fetch('/api/user-info')
+    .then(response => {
+        if (response.ok) {
+            window.isLoggedIn = true;
+            return response.json();
+        } else {
+            window.isLoggedIn = false;
+            return null;
+        }
+    })
     .then(data => {
         const tokenCount = document.getElementById('token-count');
         const authButton = document.getElementById('google-auth-button');
         const authText = document.getElementById('auth-text');
-        if (data.loggedIn) {
-            window.isLoggedIn = true;
-            tokenCount.textContent = `${data.tokens} Tokens`;
+        
+        if (window.isLoggedIn) {
+            // Convert credits to number and format to 2 decimal places
+            const credits = parseFloat(data.credits) || 0;
+            tokenCount.textContent = `$${credits.toFixed(2)} Credits`;
             authText.textContent = 'Logout';
             authButton.onclick = () => window.location.href = '/logout';
         } else {
-            window.isLoggedIn = false;
-            tokenCount.textContent = '0 Tokens';
+            tokenCount.textContent = '- Credits';
             authText.textContent = 'Login';
             authButton.onclick = () => window.location.href = '/auth/google';
         }
     })
     .catch(error => {
         console.error('Error fetching user data:', error);
-        document.getElementById('token-count').textContent = '0 Tokens';
+        document.getElementById('token-count').textContent = '0 Credits';
         window.isLoggedIn = false;
     });
 
@@ -96,18 +176,24 @@ const contentArea = document.getElementById('chat-messages');
 sidebarItems.forEach(item => {
     item.addEventListener('click', () => {
         const section = item.dataset.section;
+
+        // Handle 'home' button click by navigating to root
+        if (section === 'home') {
+            window.location.href = '/';
+            return; // Stop further processing for home link
+        }
+
         console.log(`[Sidebar Click] Detected section: '${section}'`);
+
+        // Reset the chat area cleared flag whenever a sidebar item is clicked
+        window.isChatAreaClearedForSession = false;
 
         sidebarItems.forEach(i => i.classList.remove('active'));
         item.classList.add('active');
 
         contentArea.innerHTML = '<p>Loading...</p>';
 
-        if (section === 'home') {
-            fetch('/')
-                .then(response => response.text())
-                .then(html => contentArea.innerHTML = html.match(/<section.*<\/section>/s)?.[0] || '<p>Error loading home content.</p>');
-        } else if (section === 'files') {
+        if (section === 'files') {
             fetch('/api/files')
                 .then(response => {
                     if (!response.ok) {
@@ -212,13 +298,17 @@ sidebarItems.forEach(item => {
                     
                     // Helper function to render content, converting image URLs to <img> tags
                     function renderChatMessageContent(content) {
+                        // First, parse Markdown to HTML, sanitize for safety
+                        let htmlContent = marked.parse(content || '', { sanitize: true, gfm: true, breaks: true }); 
+                        
                         // Regex to find image URLs starting with /images/generated/ within the text
                         const imageUrlRegex = /(\/images\/generated\/[^\s]+\.(?:jpg|jpeg|png|gif))\b/gi;
                         // Replace found URLs with <img> tags
                         // Added some basic Tailwind styling
-                        return content.replace(imageUrlRegex, (match) => {
+                        htmlContent = htmlContent.replace(imageUrlRegex, (match) => {
                             return `<br><img src="${match}" alt="Chat Image" class="inline-block max-w-xs max-h-40 my-2 rounded shadow border border-gray-600">`;
                         });
+                        return htmlContent;
                     }
                     
                     document.querySelectorAll('.content-item.chat-message[data-chat-id]').forEach(chat => {
@@ -234,7 +324,7 @@ sidebarItems.forEach(item => {
                                 .then(chatData => {
                                     console.log("[Chat History] Received chat data:", chatData);
                                     const messagesHtml = chatData.messages?.map(msg => `
-                                        <div class="chat-message p-3 rounded mb-2 ${msg.role === 'user' ? 'bg-blue-900 text-right' : 'bg-gray-700 text-left'}">
+                                        <div class="chat-message p-3 rounded mb-2 ${msg.role === 'user' ? 'bg-gray-800 text-right' : 'bg-gray-700 text-left'}">
                                             <strong class="font-semibold">${msg.role === 'user' ? 'You' : 'Bot'}:</strong>
                                             <div class="message-content mt-1">${renderChatMessageContent(msg.content)}</div>
                                         </div>
@@ -280,13 +370,22 @@ sidebarItems.forEach(item => {
                                     if (!response.ok) {
                                         return response.json().then(err => {
                                             console.error(`[Chat History] Delete chat error data:`, err);
-                                            throw new Error(err.message || `HTTP error! status: ${response.status}`);
+                                            throw new Error(err.message || `Server error: ${response.status}`);
                                         });
                                     }
                                     return response.json();
                                 })
                                 .then(deleteData => {
                                     console.log(`[Chat History] Successfully deleted chat ID: ${chatId}`, deleteData);
+                                    if (req.isAuthenticated()) {
+                                        res.json({
+                                            id: req.user.id,
+                                            username: req.user.username,
+                                            email: req.user.email,
+                                            credits: req.user.credits,
+                                            photo: req.user.photo
+                                        });
+                                    }
                                     if (chatItemElement) {
                                         chatItemElement.remove(); // Remove from UI
                                     }
@@ -335,33 +434,38 @@ sidebarItems.forEach(item => {
                     contentArea.innerHTML = `<p>Error loading chat UI: ${error.message}</p>`;
                 });
         } else if (section === 'gallery') {
-            // Fetch the gallery partial content
-            fetch('/partials/gallery') // Changed from /gallery to /partials/gallery
+            console.log('[core.js] Fetching gallery partial.');
+            fetch('/partials/gallery') // Fetch the partial content
                 .then(response => {
-                    if (!response.ok) throw new Error(`HTTP error fetching gallery partial! Status: ${response.status}`);
-                    return response.text(); // Get the HTML content of the gallery partial
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.text();
                 })
                 .then(html => {
-                    // Inject the whole partial content directly
-                    contentArea.innerHTML = html; 
-                    console.log("[core.js] Gallery partial HTML injected.");
+                    if (contentArea) {
+                        contentArea.innerHTML = html; // Inject the gallery HTML
+                        console.log('[core.js] Gallery partial HTML injected.');
 
-                    // NOW call the initializer from gallery.js
-                    if (typeof initializeGallery === 'function') {
-   if (document.getElementById('image-list')) {
-                        console.log("[core.js] Calling initializeGallery().");
-                        initializeGallery();
-   } else {
-   console.log("[core.js] #image-list not found, skipping initializeGallery().");
-   }
+                        // Now that the HTML is injected, #image-list should exist
+                        // Call initializeGallery (defined in gallery.js, loaded via main layout or gallery.ejs)
+                        if (typeof initializeGallery === 'function') {
+                            console.log('[core.js] Calling initializeGallery().');
+                            initializeGallery(); 
+                        } else {
+                            console.error('[core.js] initializeGallery function not found after loading partial. Check if gallery.js is loaded.');
+                            contentArea.innerHTML = '<p class="text-red-500 p-4">Error: Gallery script not found.</p>';
+                        }
                     } else {
-                        console.error("[core.js] initializeGallery function not found. Was gallery.js loaded?");
+                        console.error('[core.js] contentArea element not found.');
                     }
                 })
                 .catch(error => {
-                     console.error("Error loading gallery partial:", error);
-                     contentArea.innerHTML = `<p>Error loading gallery: ${error.message}</p>`;
-                 });
+                    console.error('Error loading gallery partial:', error);
+                    if (contentArea) {
+                        contentArea.innerHTML = `<p>Error loading gallery: ${error.message}</p>`;
+                    }
+                });
         } else if (section === 'create-image') {
             fetch('/partials/create-images') // Fetch the partial content
                 .then(response => {
@@ -436,23 +540,71 @@ sidebarItems.forEach(item => {
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM fully loaded and parsed.'); // Check if listener fires
 
+    // Hamburger Menu Toggle for Mobile
+    const hamburgerButton = document.getElementById('hamburger-button');
+    const sidebar = document.getElementById('main-sidebar');
+
+    if (hamburgerButton && sidebar) {
+        hamburgerButton.addEventListener('click', (event) => {
+            event.stopPropagation(); // Prevent click from bubbling up, e.g., to body close listener if added later
+            sidebar.classList.toggle('sidebar-open');
+            document.body.classList.toggle('body-sidebar-open'); // Toggle class on body
+        });
+    }
+
+    // Optional: Add logic to close sidebar if clicking outside of it
+    // document.addEventListener('click', (event) => {
+    //     if (sidebar && sidebar.classList.contains('sidebar-open') && 
+    //         !sidebar.contains(event.target) && event.target !== hamburgerButton) {
+    //         sidebar.classList.remove('sidebar-open');
+    //     }
+    // });
+
     fetch('/partials/modals')
         .then(response => response.text())
         .then(html => {
             document.getElementById('modals-container').innerHTML = html;
-            const showModal = (id) => document.getElementById(id)?.classList.add('active');
-            const hideModal = (id) => document.getElementById(id)?.classList.remove('active');
+
+            // Modal Functions - Make them global
+            window.showModal = function(id) {
+                const modal = document.getElementById(id);
+                if (modal) {
+                    modal.classList.remove('hidden');
+                    console.log(`Modal ${id} shown`);
+                } else {
+                    console.error(`Modal with ID ${id} not found`);
+                }
+            }
+
+            window.hideModal = function(id) {
+                const modal = document.getElementById(id);
+                if (modal) {
+                    modal.classList.add('hidden');
+                    console.log(`Modal ${id} hidden`);
+                } else {
+                    console.error(`Modal with ID ${id} not found`);
+                }
+            }
 
             document.getElementById('tokens-button')?.addEventListener('click', () => {
                 if (!window.isLoggedIn) {
-                    showToast('Please log in to buy tokens.', 'error');
-                    // Optionally show welcome/login modal instead of just a toast
-                    // showModal('welcome-modal'); 
-                } else {
-                    showModal('buy-tokens-modal');
+                    showToast('Please log in to buy credits.', 'error');
+                    window.location.href = '/auth/google';
+                    return;
                 }
+                window.showModal('buy-tokens-modal');
             });
-            document.getElementById('close-buy-tokens-modal')?.addEventListener('click', () => hideModal('buy-tokens-modal'));
+
+            // Add debug for modal existence on page load
+            document.addEventListener('DOMContentLoaded', () => {
+                console.log('Checking for modal elements on page load');
+                const buyTokensModal = document.getElementById('buy-tokens-modal');
+                const welcomeModal = document.getElementById('welcome-modal');
+                console.log('Buy Tokens Modal exists:', !!buyTokensModal);
+                console.log('Welcome Modal exists:', !!welcomeModal);
+            });
+
+            document.getElementById('close-buy-tokens-modal')?.addEventListener('click', () => window.hideModal('buy-tokens-modal'));
 
             // --- Stripe Integration ---
             // Ensure Stripe.js script is loaded in your main HTML layout (layout.ejs)
@@ -485,7 +637,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     try {
                         // Call your backend to create the Checkout Session, sending tokens and price
-                        const response = await fetch('/create-checkout-session', { 
+                        const response = await fetch('/payment/create-checkout-session', { 
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ tokens: tokens, price: price }) // Send tokens and price
@@ -526,24 +678,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Handle Welcome Modal (unchanged from your provided code)
             if (!localStorage.getItem('welcomeShown')) {
-                showModal('welcome-modal');
+                window.showModal('welcome-modal');
                 localStorage.setItem('welcomeShown', 'true');
             }
-            document.getElementById('close-welcome-modal')?.addEventListener('click', () => hideModal('welcome-modal'));
-            document.getElementById('close-welcome-modal-btn')?.addEventListener('click', () => hideModal('welcome-modal'));
+            document.getElementById('close-welcome-modal')?.addEventListener('click', () => window.hideModal('welcome-modal'));
+            document.getElementById('close-welcome-modal-btn')?.addEventListener('click', () => window.hideModal('welcome-modal'));
             document.getElementById('register-with-google')?.addEventListener('click', () => {
                 // Redirect to Google Auth instead of alert
                 window.location.href = '/auth/google';
-                hideModal('welcome-modal');
+                window.hideModal('welcome-modal');
             });
             
             // Handle About Popup (unchanged from your provided code)
-            document.getElementById('close-about-popup')?.addEventListener('click', () => hideModal('about-popup'));
-            document.getElementById('close-about-popup-btn')?.addEventListener('click', () => hideModal('about-popup'));
+            document.getElementById('close-about-popup')?.addEventListener('click', () => window.hideModal('about-popup'));
+            document.getElementById('close-about-popup-btn')?.addEventListener('click', () => window.hideModal('about-popup'));
             document.getElementById('content-area')?.addEventListener('click', (e) => {
                 if (e.target.id === 'about-link') {
                     e.preventDefault();
-                    showModal('about-popup');
+                    window.showModal('about-popup');
                 }
             });
         })

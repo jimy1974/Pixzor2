@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer-when-downgrade">
     <title><%= locals.title || 'Pixzor' %></title>
     <meta name="description" content="<%= locals.description || 'Create AI movies, images, and chat with Pixzor' %>">
     <meta name="keywords" content="AI movies, image generation, chatbot, <%= locals.title || 'Pixzor' %>">
@@ -14,26 +15,79 @@
     <!-- Include imagesLoaded and Masonry via CDN -->
     <script src="https://unpkg.com/imagesloaded@5/imagesloaded.pkgd.min.js"></script>
     <script src="https://unpkg.com/masonry-layout@4/dist/masonry.pkgd.min.js"></script>
+    <!-- Add marked.js for Markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
-    .topbar { position: fixed; top: 0; left: 60px; right: 0; background: #374151; padding: 10px 20px; z-index: 40; }
-    .sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 60px; background: #1f2937; padding: 15px 0; display: flex; flex-direction: column; align-items: center; }
+    .topbar { 
+        position: fixed;
+        top: 0;
+        left: 0; /* Default */
+        right: 0; /* Default */
+        width: auto; /* Default */
+        background: #374151; 
+        padding: 10px 20px; 
+        z-index: 40; 
+        transition: left 0.3s ease-in-out; /* Transition left property */
+    }
+    .sidebar { 
+        position: fixed; 
+        left: 0; 
+        top: 0; 
+        bottom: 0; 
+        width: 200px; 
+        background: #1f2937; 
+        padding: 15px 0; 
+        display: flex; 
+        flex-direction: column;
+        align-items: center;
+        gap: 10px; 
+        transition: transform 0.3s ease-in-out; /* Restore transition */
+        z-index: 100; /* High z-index */
+        box-sizing: border-box; /* Include padding in width */
+        overflow: hidden; /* Clip overflowing content */
+    }
     .sidebar-item { color: #d1d5db; padding: 15px; cursor: pointer; }
     .sidebar-item:hover, .sidebar-item.active { color: #15803d; }
     .content-area { 
-        margin-left: 60px; margin-top: 60px; margin-bottom: 150px; width: calc(100% - 60px); background: #1f2937;
-        padding: 15px; border-radius: 8px; overflow-y: auto; display: flex;
-        flex-direction: column; gap: 10px; }
+        margin-top: 60px; 
+        margin-bottom: 150px; 
+        width: 100%; 
+        background: #1f2937;
+        padding: 15px; 
+        border-radius: 8px; 
+        overflow-y: auto; 
+        display: flex;
+        flex-direction: column; 
+        gap: 10px; 
+    }
     .content-item { margin-bottom: 10px; }
     .thumbnail { max-width: 150px; height: auto; border-radius: 4px; cursor: pointer; }
     .chat-message { padding: 10px; border-radius: 4px; margin-bottom: 10px; max-width: 70%; }
     .chat-message.user { background: #4b5563; margin-left: auto; align-self: flex-end; }
     .chat-message.bot-message { background: #374151; margin-right: auto; }
+    .chat-message.bot-message p {
+        margin-bottom: 1rem; /* Adjust value as needed */
+    }
     .chat-box { 
-        position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 100%; max-width: 80%; 
-        background: #1f2937; padding: 15px; border-radius: 16px; box-shadow: 0 0 15px rgba(0, 0, 0, 0.5); z-index: 30; border: none; }
+        position: fixed; 
+        bottom: 20px; 
+        left: 1rem; 
+        right: 1rem;
+        width: auto;
+        background: #1f2937; 
+        padding: 15px; 
+        border-radius: 16px; 
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.5); 
+        z-index: 30; 
+        border: none;
+        transition: left 0.3s ease-in-out, right 0.3s ease-in-out; 
+    }
     .chat-tabs { display: flex; gap: 6px; margin-bottom: 10px; border: none; }
     .chat-tab { flex: 1; padding: 4px; text-align: center; cursor: pointer; background: #374151; color: #d1d5db; 
-        transition: background 0.2s; border-radius: 12px; border: none; }
+        transition: background 0.2s; 
+        border-radius: 12px; 
+        border: none; 
+    }
     .chat-tab:hover { background: #4b5563; }
     .chat-tab.active { background: #15803d; color: white; }
     .tab-label { display: inline; }
@@ -42,19 +96,39 @@
     .chat-content.active { display: block; }
     .sub-tabs { display: flex; border-bottom: 1px solid #4b5563; margin-bottom: 10px; }
     .sub-tab { flex: 1; padding: 4px; text-align: center; cursor: pointer; background: #374151; color: #d1d5db; 
-        border-radius: 8px; margin: 0 2px; transition: background 0.2s; }
+        border-radius: 8px; 
+        margin: 0 2px; 
+        transition: background 0.2s; 
+    }
     .sub-tab:hover { background: #4b5563; }
     .sub-tab.active { background: #22c55e; color: white; }
     .sub-content { display: none; }
     .sub-content.active { display: flex; align-items: center; gap: 10px; }
     .sub-content input, .sub-content textarea { flex: 1; border-radius: 12px; background: #4b5563; color: #d1d5db; 
-        padding: 8px; border: none; }
+        padding: 8px; 
+        border: none; 
+    }
+    /* Style the chat textarea */
+    #chat-talk-input {
+        resize: none; /* Disable manual resizing */
+        max-height: 150px; /* Limit maximum height */
+        overflow-y: auto; /* Show scrollbar if max-height is exceeded */
+        min-height: 40px; /* Ensure a minimum height */
+    }
     #chat-submit { background: #15803d; color: white; padding: 5px 15px; border-radius: 12px; transition: background 0.2s; }
     #chat-submit:hover { background: #16a34a; }
     .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 50; display: none; justify-content: center; align-items: center; }
-    .modal.active { display: flex; }
+    .modal:not(.hidden) { display: flex; }
     .modal-backdrop { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); }
     .modal-content { position: relative; z-index: 51; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 15px rgba(0, 0, 0, 0.5); }
+    /* Specific style for Welcome Modal content */
+    #welcome-modal .modal-content {
+        background-color: #1f2937 !important; /* Tailwind bg-gray-800 */
+        color: #ffffff !important; /* Ensure text is white */
+        padding: 24px; /* Add padding */
+        border-radius: 8px; /* Add rounded corners */
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6); /* Add shadow */
+    }
     .typing { color: #888; font-style: italic; }
     .chat-message.bot-message ol { margin: 0; padding-left: 20px; color: #d1d5db; }
     .chat-message.bot-message li { margin-bottom: 5px; }
@@ -64,7 +138,6 @@
     .image-modal img { max-width: 90vw; max-height: 90vh; }
     @media (max-width: 600px) {
         .thumbnail, .image-loading { max-width: 80px; height: auto; }
-        .chat-box { left: 60px; transform: none; max-width: calc(100% - 60px); }
         .tab-label.full-label { display: none; }
         .tab-label.short-label { display: inline; }
         .sidebar-item { padding: 8px; }
@@ -242,6 +315,123 @@
      #toast-container > div button:hover {
           opacity: 1;
      }
+    /* Advert Container Styling */
+    #advert-container {
+        background-image: url('/images/advert.png');
+    }
+
+    @media (max-width: 600px) {
+        #advert-container {
+            background-image: url('/images/mobile-advert.png');
+            /* Optional: Adjust size/height for mobile if needed */
+            /* max-width: 100%; */
+            /* height: auto; */ 
+            /* padding-top: 4rem; Example adjustment */
+        }
+
+        .thumbnail, .image-loading { max-width: 80px; height: auto; }
+        .tab-label.full-label { display: none; }
+        .tab-label.short-label { display: inline; }
+        .sidebar-item { padding: 8px; }
+    }
+    /* Sidebar Styles */
+    #main-sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        width: 60px; /* Set mobile width to match desktop */
+        background: #1f2937; 
+        padding-top: 60px; 
+        z-index: 100; /* Ensure it's above content */
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px; 
+        transition: transform 0.3s ease-in-out; /* Restore transition */
+        z-index: 100; /* High z-index */
+        box-sizing: border-box; /* Include padding in width */
+        overflow: hidden; /* Clip overflowing content */
+    }
+
+    /* Sidebar open state on mobile (toggled by JS) */
+    body.body-sidebar-open #main-sidebar {
+        transform: translateX(0); /* Slides sidebar in */
+    }
+
+    /* Sidebar closed state on mobile (default) */
+    body:not(.body-sidebar-open) #main-sidebar {
+        /* Apply transform only when body lacks .body-sidebar-open */
+        transform: translateX(-100%); /* Keep sidebar hidden */
+    }
+
+    /* Mobile Adjustments when Sidebar is Open */
+    body.body-sidebar-open .topbar {
+        left: 60px; /* Match updated sidebar width */
+    }
+
+    /* Adjust chat-box when sidebar is open on mobile */
+    body.body-sidebar-open .chat-box {
+        left: calc(60px + 1rem);
+        right: 1rem;
+        width: auto;
+    }
+
+    /* Desktop Styles (md and up) */
+    @media (min-width: 768px) { /* Tailwind md breakpoint */
+        /* Restore body padding for desktop sidebar */
+        body {
+            padding-left: 60px; /* Add padding to body */
+            /* Transition already on base body style */
+        }
+
+        body #main-sidebar { /* Use !important to force override */
+            transform: translateX(0) !important; /* Always visible on desktop */
+            width: 60px !important; /* Original width */
+            z-index: 40; /* Below potential mobile overlays */
+        }
+
+        /* Restore topbar positioning for desktop */
+        .topbar {
+            left: 60px; /* Align with padded body */
+            right: 0;
+            width: auto; /* Span remaining width */
+        }
+
+        /* Restore chat-box positioning for desktop */
+        .chat-box {
+            left: calc(60px + 1rem);
+            right: 1rem;
+            width: auto;
+        }
+
+        /* Add margin to main content area on desktop to avoid sidebar overlap */
+        main {
+            margin-left: 60px;
+        }
+    }
+
+    /* Base Body Styles */
+    body {
+        padding-left: 0; /* Default mobile padding */
+        transition: padding-left 0.3s ease-in-out; /* Add transition */
+    }
+
+    /* Ensure chat messages area doesn't overflow */
+    #chat-messages {
+        /* padding-bottom might need adjustment based on chat-box height */
+        padding-bottom: 150px;
+    }
+
+    /* Tab Content Area */
+    .tab-content {
+        display: none;
+    }
+
+    /* Add spacing between paragraphs generated by marked */
+    .message-content p:not(:last-child) {
+        margin-bottom: 0.75rem; /* Tailwind's mb-3 */
+    }
 </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -249,8 +439,13 @@
     <div id="toast-container" class="fixed top-5 right-5 z-50 space-y-2"></div>
     
     <!-- Top Bar -->
-    <header class="topbar">
-        <div class="container mx-auto flex justify-end items-center">
+    <header class="topbar flex items-center">
+        <!-- Hamburger Menu Button (Mobile Only) -->
+        <button id="hamburger-button" class="text-white p-2 md:hidden">
+            <i class="fas fa-bars"></i>
+        </button>
+        
+        <div class="flex items-center space-x-4 ml-auto">
             <button id="tokens-button" class="flex items-center bg-gray-600 hover:bg-yellow-600 px-4 py-2 rounded-lg text-base mr-4">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-yellow-400 mr-2" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
@@ -268,7 +463,7 @@
     </header>
 
     <!-- Sidebar -->
-    <div class="sidebar">
+    <div id="main-sidebar" class="sidebar">
         <div class="sidebar-item active" data-section="home" title="Home">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -280,9 +475,7 @@
             </svg>
         </div>
         <div class="sidebar-item" data-section="chat-history" title="Chat History">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16h6m-7 4h8a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
+            <i class="fas fa-list h-6 w-6"></i>
         </div>
         <div class="sidebar-item" data-section="gallery" title="Gallery">
             <i class="fas fa-images h-6 w-6"></i>
@@ -292,7 +485,7 @@
     <!-- Main Content -->
     <main class="p-4 flex flex-col flex-1 overflow-hidden">
         <div id="content-area" class="content-area flex-1 overflow-y-auto">
-            <div id="chat-messages" class="flex-1 overflow-y-auto">
+            <div id="chat-messages" class="flex-1 overflow-y-auto pb-32">
                 <%- body %>
             </div>
             <!-- Removed Storyboard -->
@@ -441,6 +634,11 @@
 
         <!-- Include other modals from partial -->
         <%- include('../partials/modals') %>
+
+    </div>
+
+    <!-- Add a test link for welcome modal -->
+    <div id="test-welcome-modal" style="position: fixed; bottom: 10px; right: 10px; z-index: 1000;">
 
     </div>
 

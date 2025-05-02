@@ -7,109 +7,102 @@
     </div>
     
     <!-- Modified: Create Images Content Area -->
-    <div class="sub-content" id="create-images-content">
-        <div class="flex items-start w-full gap-2">
-            
-            <!-- Img2Img Thumbnail Upload (Conditionally Hidden) -->
-            <div id="thumbnail-container" class="flex-shrink-0 relative"> <!-- Container for conditional hiding -->
-                <!-- Wrapper for icon overlay -->
-                <div id="thumbnail-wrapper" class="relative w-16 h-16 overflow-hidden rounded"> 
-                    <label for="image-upload-input" class="cursor-pointer block">
-                        <img id="image-upload-thumbnail" src="/images/placeholder.png" alt="Upload Image" class="w-full h-full object-contain border border-gray-600 hover:border-green-500 transition-colors bg-gray-700"> 
-                    </label>
-                    <!-- Placeholder Icon -->
-                    <div id="thumbnail-placeholder-icon" class="absolute inset-0 flex items-center justify-center text-gray-400 text-2xl pointer-events-none">
+    <div class="sub-content p-2 h-full overflow-y-auto bg-gray-800 text-gray-300 text-sm" id="create-images-content">
+        <div class="flex w-full gap-2">
+
+            <!-- Img2Img Thumbnail Upload (Pixzor Styled) -->
+            <div id="thumbnail-container" class="flex-shrink-0 relative w-16 h-16 overflow-hidden rounded">
+                <label for="image-upload-input" class="cursor-pointer block w-full h-full">
+                    <!-- Placeholder Icon (shown by default) -->
+                    <div id="thumbnail-placeholder-icon" class="w-full h-full bg-gray-700 flex items-center justify-center text-gray-400 text-2xl rounded border border-gray-600">
                         <i class="fas fa-image"></i>
                     </div>
-                    <input type="file" id="image-upload-input" accept="image/*" class="hidden">
-                    <button id="clear-image-upload" class="absolute top-0 right-0 -mt-1 -mr-1 bg-red-600 hover:bg-red-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hidden z-20" title="Clear Image"> 
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
+                    <!-- Image Preview (hidden by default) -->
+                    <img id="image-thumbnail-preview" src="#" alt="Upload preview" class="w-full h-full object-cover rounded hidden">
+                </label>
+                <input type="file" id="image-upload-input" name="image" accept="image/png, image/jpeg" class="hidden">
+                <button id="clear-image-upload" class="absolute top-0 right-0 -mt-1 -mr-1 bg-red-600 hover:bg-red-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs z-20 hidden" title="Clear Image">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
 
             <!-- Prompt and Controls Container -->
-            <div class="flex-grow flex flex-col gap-2"> 
-                <!-- Prompt Input -->
-                <textarea id="image-input" class="w-full p-2 rounded bg-gray-800 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 resize-none text-sm" placeholder="Enter image prompt..." rows="2"></textarea>
+            <div class="flex-grow flex flex-col gap-2">
+                <!-- Prompt Input (Pixzor Styled) -->
+                <textarea id="image-prompt-input" name="prompt" class="w-full p-2 rounded bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-green-500 resize-none text-sm" placeholder="Describe the image you want to create..." rows="2"></textarea>
 
-                <!-- Controls Row -->
-                <div class="flex flex-wrap items-center gap-2 text-xs"> 
-                    <!-- Aspect Ratio Dropdown -->
+                <!-- Controls Row (Pixzor Styled) -->
+                <div class="flex flex-wrap items-center gap-2 text-xs">
+
+                    <!-- Aspect Ratio Dropdown (Pixzor Styled + Fix Applied) -->
                     <div class="relative inline-block text-left">
-                        <div id="aspect-ratio-dropdown" class="custom-dropdown cursor-pointer" data-value="1:1">
-                            <div class="selected-option inline-flex items-center justify-center w-full rounded border border-gray-600 shadow-sm px-2 py-1 bg-gray-700 text-xs font-medium text-white hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-green-500">
-                                <span id="selected-ratio-icon"><i class="fas fa-square"></i></span>
-                                <span id="selected-ratio-text" class="ml-1">1:1</span>
-                                <svg class="-mr-1 ml-1 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-                                </svg>
-                            </div>
-                        </div>
-                        <div id="aspect-ratio-options" class="dropdown-options origin-bottom-left absolute bottom-full left-0 mb-1 w-max-content rounded-md shadow-lg bg-gray-700 ring-1 ring-black ring-opacity-5 focus:outline-none hidden z-50" role="menu" aria-orientation="vertical" aria-labelledby="aspect-ratio-dropdown"> 
+                        <button id="aspect-ratio-dropdown" type="button" class="inline-flex items-center justify-center w-full rounded border border-gray-600 shadow-sm px-2 py-1 bg-gray-700 text-xs font-medium text-gray-300 hover:bg-gray-600 focus:outline-none focus:ring-1 focus:ring-offset-0 focus:ring-offset-gray-800 focus:ring-green-500" data-value="1:1">
+                            <span id="selected-ratio-icon"><i class="fas fa-square"></i></span>
+                            <span id="selected-ratio-text" class="ml-1">1:1</span> <!-- Span for dynamic text -->
+                            <svg class="-mr-1 ml-1 h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        <div id="aspect-ratio-options" class="dropdown-options origin-bottom-left absolute bottom-full left-0 mb-1 w-max-content rounded-md shadow-lg bg-gray-700 ring-1 ring-black ring-opacity-5 focus:outline-none hidden z-50" role="menu" aria-orientation="vertical" aria-labelledby="aspect-ratio-dropdown">
                             <div class="py-1" role="none">
-                                <a href="#" class="aspect-ratio-option text-white block px-3 py-1 text-xs hover:bg-gray-600 hidden" role="menuitem" data-value="1:1" title="Square (1:1)"><i class="fas fa-square w-4 inline-block mr-1"></i> 1:1</a>
-                                <a href="#" class="aspect-ratio-option text-white block px-3 py-1 text-xs hover:bg-gray-600" role="menuitem" data-value="16:9" title="Wide (16:9)"><i class="fas fa-desktop w-4 inline-block mr-1"></i> 16:9</a>
-                                <a href="#" class="aspect-ratio-option text-white block px-3 py-1 text-xs hover:bg-gray-600" role="menuitem" data-value="9:16" title="Tall (9:16)"><i class="fas fa-mobile-alt w-4 inline-block mr-1"></i> 9:16</a>
+                                <a href="#" class="aspect-ratio-option text-gray-300 hover:text-white block px-3 py-1 text-xs hover:bg-gray-600" role="menuitem" data-value="1:1" title="Square (1:1)"><i class="fas fa-square w-4 inline-block mr-1"></i> 1:1</a>
+                                <a href="#" class="aspect-ratio-option text-gray-300 hover:text-white block px-3 py-1 text-xs hover:bg-gray-600" role="menuitem" data-value="16:9" title="Wide (16:9)"><i class="fas fa-desktop w-4 inline-block mr-1"></i> 16:9</a>
+                                <a href="#" class="aspect-ratio-option text-gray-300 hover:text-white block px-3 py-1 text-xs hover:bg-gray-600" role="menuitem" data-value="9:16" title="Tall (9:16)"><i class="fas fa-mobile-alt w-4 inline-block mr-1"></i> 9:16</a>
                             </div>
                         </div>
                     </div>
-                    <!-- END: Aspect Ratio Dropdown -->
-                    
-                    <!-- NEW: Style Select -->
-                    <select id="style-select" class="custom-select text-xs" title="Select Style">
-                        <option value="" selected>Style: None</option>
-                        <option value="3d-model">Style: 3D Model</option>
-                        <option value="analog-film">Style: Analog Film</option>
-                        <option value="anime">Style: Anime</option>
-                        <option value="cinematic">Style: Cinematic</option>
-                        <option value="comic-book">Style: Comic Book</option>
-                        <option value="digital-art">Style: Digital Art</option>
-                        <option value="enhance">Style: Enhance</option>
-                        <option value="fantasy-art">Style: Fantasy Art</option>
-                        <option value="isometric">Style: Isometric</option>
-                        <option value="line-art">Style: Line Art</option>
-                        <option value="low-poly">Style: Low Poly</option>
-                        <option value="neon-punk">Style: Neon Punk</option>
-                        <option value="origami">Style: Origami</option>
-                        <option value="photographic">Style: Photographic</option>
-                        <option value="pixel-art">Style: Pixel Art</option>
-                        <option value="texture">Style: Texture</option>
-                        <option value="craft-clay">Style: Craft Clay</option>
-                    </select>
-                    <!-- END: Style Select -->
 
-                    <!-- NEW: Model Select -->
-                    <select id="model-select" class="custom-select text-xs" title="Select Model">
-                        <option value="FLUX.1 Schnell" data-cost="1" selected>Model: Schnell (1)</option>
-                        <option value="FLUX.1 Canny" data-cost="10">Model: Canny (10)</option>
-                        <option value="FLUX.1 Depth" data-cost="10">Model: Depth (10)</option>
-                        <option value="FLUX.1 Redux" data-cost="10">Model: Redux (10)</option>
-                    </select>
-                    <!-- END: Model Select -->
-
-                    <!-- NEW: Enhance Button -->
-                    <button id="enhance-button" class="custom-button px-2" title="Enhance Prompt">
-                        <i class="fas fa-magic"></i> 
-                    </button>
-                    <!-- END: Enhance Button -->
-
-                    <!-- NEW: Strength Slider (Initially hidden, shown when image is uploaded) -->
-                    <div id="strength-control" class="relative inline-block text-left hidden ml-2"> <!-- Add ml-2 for spacing -->
-                        <label for="image-strength-slider" class="block text-xs font-medium text-gray-300 mr-1">Strength:</label>
-                        <input type="range" id="image-strength-slider" min="0" max="1" step="0.05" value="0.85" class="w-20 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer range-sm align-middle">
-                        <span id="strength-value-display" class="text-xs text-gray-400 ml-1">0.85</span>
+                    <!-- Style Select Container (Populated by JS) -->
+                    <div id="style-select-container" class="relative inline-block text-left">
+                        <select id="style-select" name="style" class="w-full rounded border border-gray-600 shadow-sm px-2 py-1 bg-gray-700 text-xs font-medium text-gray-300 hover:bg-gray-600 focus:outline-none focus:ring-1 focus:ring-offset-0 focus:ring-offset-gray-800 focus:ring-green-500" title="Select Style">
+                            <option value="" selected>Style: None</option>
+                            <!-- Styles will be populated dynamically -->
+                        </select>
+                        <input type="hidden" id="style-label-input" name="styleLabel" value=""> <!-- Hidden input for style label -->
+                        <input type="hidden" id="negative-prompt-input" name="negativePromptOverride" value=""> <!-- Hidden input for style-specific negative prompt -->
                     </div>
-                    <!-- END: Strength Slider -->
 
-                    <!-- Generate Button -->
-                    <button id="image-submit" data-mode="create-images" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded transition-colors text-sm flex items-center gap-1 ml-auto"> 
+                    <!-- Model Select (Pixzor Styled & Naming) -->
+                    <div class="relative">
+                        <%# ** CORRECTED MODEL LIST BELOW ** %>
+                        <select id="image-model-select" name="model" class="appearance-none w-full bg-gray-700 border border-gray-600 text-gray-300 py-1 pl-2 pr-7 rounded text-xs focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500" title="Select Model">
+                            <%# Format: Model Name %>
+                            <%# Value is Runware ID, data-cost is *actual* Runware cost %>
+                            <option value="runware:100@1" data-cost="0.0065" selected>Model: Flux Schnell</option> <%# Scaled cost: 0.0013*5=0.0065, rounded to 0.01 %>
+                            <option value="runware:101@1" data-cost="0.016">Model: Flux Dev</option> <%# Scaled cost: 0.0032*5=0.016, rounded to 0.02 %>
+                            <option value="rundiffusion:130@100" data-cost="0.016">Model: Juggernaut Pro</option> <%# Scaled cost: 0.0032*5=0.016, rounded to 0.02 %>
+                            <option value="civitai:133005@782002" data-cost="0.0065">Face / Character</option> <%# Scaled cost: 0.0013*5=0.0065, rounded to 0.01 %>
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 text-gray-400">
+                            <svg class="fill-current h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- Enhance Button (Placeholder - Pixzor Styled) -->
+                    <button id="enhance-prompt-button" class="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2 py-1 rounded border border-gray-600 text-xs" title="Enhance Prompt (Future Feature)">
+                        <i class="fas fa-magic"></i>
+                    </button>
+
+                    <!-- Strength Slider Container (Pixzor Styled) -->
+                    <div id="image-strength-control" class="items-center gap-1 hidden ml-2">
+                        <label for="image-strength-slider" class="block text-xs font-medium text-gray-400">Strength:</label>
+                        <input type="range" id="image-strength-slider" name="strength" min="0" max="1" step="0.01" value="0.75" class="w-20 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer range-sm align-middle accent-green-500">
+                        <span id="image-strength-value-display" class="text-xs text-gray-400 w-6 text-right">0.75</span>
+                    </div>
+
+                    <!-- Generate Button (Pixzor Styled) -->
+                    <button id="image-generate-button" type="button" class="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-1 rounded transition-colors text-sm flex items-center gap-1 ml-auto" disabled>
                         <span>Generate</span>
-                        <span id="token-cost-display">(?)</span> 
+                        <span id="image-token-cost-display">($0.01)</span>
                     </button>
                 </div>
-            </div>
 
+                <!-- Feedback Area -->
+                <div id="image-gen-feedback" class="mt-2 text-xs text-gray-400 min-h-[1.2em]"></div>
+
+            </div>
         </div>
     </div>
    
@@ -163,22 +156,43 @@
     background-color: #4b5563; /* hover:bg-gray-600 */
 }
 
+/* Ensure thumbnail container doesn't collapse */
+#thumbnail-container {
+    min-width: 4rem; /* Corresponds to w-16 */
+    min-height: 4rem; /* Corresponds to h-16 */
+}
+
+/* Custom scrollbar styles */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #4b5563; /* bg-gray-600 */
+    border-radius: 10px;
+    box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.3);
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background-color: #f7fafc; /* gray-100 */
+}
 </style>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const imageUploadInput = document.getElementById('image-upload-input');
-    const thumbnail = document.getElementById('image-upload-thumbnail');
+    const thumbnail = document.getElementById('image-thumbnail-preview');
     const clearButton = document.getElementById('clear-image-upload');
     const thumbnailContainer = document.getElementById('thumbnail-container'); 
     const placeholderIcon = document.getElementById('thumbnail-placeholder-icon'); 
     
     // NEW elements
-    const modelSelect = document.getElementById('model-select');
-    const styleSelect = document.getElementById('style-select'); 
-    const enhanceButton = document.getElementById('enhance-button'); 
-    const generateButton = document.getElementById('image-submit'); 
-    const tokenCostDisplay = document.getElementById('token-cost-display'); 
+    const modelSelect = document.getElementById('image-model-select');
+    const styleSelect = document.getElementById('image-style-select'); 
+    const enhanceButton = document.getElementById('enhance-prompt-button'); 
+    const generateButton = document.getElementById('image-generate-button'); 
+    const tokenCostDisplay = document.getElementById('image-token-cost-display'); 
     
     // Dropdown elements
     const dropdown = document.getElementById('aspect-ratio-dropdown');
@@ -193,24 +207,10 @@ document.addEventListener('DOMContentLoaded', () => {
         tokenCostDisplay.textContent = `(${cost})`;
     }
 
-    function checkModelAndToggleThumbnail() {
-        const selectedModelValue = modelSelect.value;
-        if (selectedModelValue === 'FLUX.1 Schnell') {
-            thumbnailContainer.classList.add('hidden');
-        } else {
-            thumbnailContainer.classList.remove('hidden');
-        }
-    }
     // --- End Helper Functions ---
 
     // --- Initial Setup ---
     updateGenerateButtonCost();
-    checkModelAndToggleThumbnail();
-    if (thumbnail.src.includes('placeholder.png')) {
-        placeholderIcon.classList.remove('hidden');
-    } else {
-        placeholderIcon.classList.add('hidden');
-    }
     // --- End Initial Setup ---
 
     // --- Event Listeners ---
@@ -219,7 +219,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (modelSelect) {
         modelSelect.addEventListener('change', () => {
             updateGenerateButtonCost();
-            checkModelAndToggleThumbnail();
         });
     }
 
@@ -231,24 +230,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     thumbnail.src = e.target.result;
-                    clearButton.classList.remove('hidden');
-                    placeholderIcon.classList.add('hidden'); 
+                    thumbnail.classList.remove('hidden');
+                    placeholderIcon.classList.add('hidden');
                 }
                 reader.readAsDataURL(file);
             } else {
                 thumbnail.src = '/images/placeholder.png'; 
-                clearButton.classList.add('hidden'); 
                 imageUploadInput.value = ''; 
-                placeholderIcon.classList.remove('hidden'); 
+                thumbnail.classList.add('hidden');
+                placeholderIcon.classList.remove('hidden');
             }
         });
 
         // Clear Button Listener
         clearButton.addEventListener('click', () => {
             thumbnail.src = '/images/placeholder.png'; 
-            clearButton.classList.add('hidden');    
             imageUploadInput.value = '';           
-            placeholderIcon.classList.remove('hidden'); 
+            thumbnail.classList.add('hidden');
+            placeholderIcon.classList.remove('hidden');
         });
     }
 
@@ -256,6 +255,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (dropdown && optionsContainer && selectedIconSpan && selectedRatioTextSpan) {
         // Toggle dropdown visibility
         dropdown.addEventListener('click', () => {
+            if (dropdown.disabled) {
+                console.log('[AspectRatio Click] Ignored (Button disabled)');
+                return;
+            }
+            console.log('[AspectRatio Click] Fired. Options hidden before toggle:', optionsContainer.classList.contains('hidden'));
             optionsContainer.classList.toggle('hidden');
         });
 
@@ -310,7 +314,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // NEW: Strength Slider Update
     const strengthSlider = document.getElementById('image-strength-slider');
-    const strengthValueDisplay = document.getElementById('strength-value-display');
+    const strengthValueDisplay = document.getElementById('image-strength-value-display');
     if(strengthSlider && strengthValueDisplay) {
         strengthSlider.addEventListener('input', () => {
             strengthValueDisplay.textContent = strengthSlider.value;
@@ -320,7 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Function to update Generate button state and Strength visibility
     function updateControlsBasedOnState() {
         const modelValue = modelSelect.value;
-        const isSchnellModel = modelValue === 'FLUX.1 Schnell';
+        const isSchnellModel = modelValue === 'runware:100@1';
         const hasUploadedImage = uploadedImageData !== null;
         const hasPrompt = imageInput.value.trim().length > 0;
 

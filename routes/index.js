@@ -3,381 +3,123 @@ const router = express.Router();
 const { User, GeneratedContent, ImageComment, sequelize } = require('../db');
 const { Op } = require('sequelize');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const fetch = require('cross-fetch'); 
-const fs = require('fs').promises;
+const fetch = require('node-fetch'); 
 const path = require('path');
 const multer = require('multer'); 
-const sharp = require('sharp');   
+const { Runware } = require('@runware/sdk-js'); // Import Runware SDK
+const { generateTextToImage, generateImageToImage } = require('../utils/runwareUtils'); // Import helpers
+const { v4: uuidv4 } = require('uuid'); // Import uuid
+const axios = require('axios'); // Import axios
+const sharp = require('sharp');
+const fs = require('fs').promises;
+const { RUNWARE_MODELS } = require('../config/modelsConfig'); // Import model config
+const { PROMPT_BASED_STYLES } = require('../config/stylesConfig'); // Import styles config
 
-// --- Multer Configuration ---
-const storage = multer.memoryStorage(); 
-const upload = multer({
-    storage: storage,
-    limits: { fileSize: 10 * 1024 * 1024 }, 
+// Helper function to calculate dimensions based on ratio and max dimension, ensuring multiples of 64
+function calculateDimensionsForRatio(ratioString, baseDimension = 1024) {
+    const parts = ratioString.split(':');
+    if (parts.length !== 2) return { width: baseDimension, height: baseDimension }; // Default to square
+
+    const ratioW = parseInt(parts[0], 10);
+    const ratioH = parseInt(parts[1], 10);
+    if (isNaN(ratioW) || isNaN(ratioH) || ratioW <= 0 || ratioH <= 0) {
+        return { width: baseDimension, height: baseDimension }; // Default square
+    }
+
+    let targetWidth, targetHeight;
+
+    if (ratioW >= ratioH) { // Landscape or Square
+        targetWidth = baseDimension;
+        targetHeight = Math.round((baseDimension * ratioH) / ratioW);
+    } else { // Portrait
+        targetHeight = baseDimension;
+        targetWidth = Math.round((baseDimension * ratioW) / ratioH);
+    }
+
+    // Ensure dimensions are multiples of 64 and at least 64
+    targetWidth = Math.max(64, Math.round(targetWidth / 64) * 64);
+    targetHeight = Math.max(64, Math.round(targetHeight / 64) * 64);
+
+    return { width: targetWidth, height: targetHeight };
+}
+
+// --- Define Upload Directory ONCE --- 
+const UPLOAD_DIR = path.join(__dirname, '..', 'public', 'uploads'); 
+// Ensure the directory exists 
+fs.mkdir(UPLOAD_DIR, { recursive: true }).catch(err => {
+    if (err.code !== 'EEXIST') { 
+        console.error("[Routes] Error creating upload directory:", err);
+    }
+});
+// --- END Upload Directory Definition ---
+
+// --- Initialize Runware SDK --- 
+if (!process.env.RUNWARE_API_KEY) {
+    console.error("FATAL ERROR: RUNWARE_API_KEY environment variable is not set.");
+    process.exit(1); // Exit if API key is missing
+}
+const runware = new Runware({ apiKey: process.env.RUNWARE_API_KEY });
+
+// --- Multer Setup for Image Upload --- 
+// Storage strategy for image-to-image (memory for direct processing)
+const memoryStorage = multer.memoryStorage();
+const upload = multer({ 
+    storage: memoryStorage, 
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
     fileFilter: (req, file, cb) => {
-        if (file.mimetype === 'image/jpeg' || file.mimetype === 'image/png') {
+        // Basic image type check
+        if (file.mimetype.startsWith('image/')) {
             cb(null, true);
         } else {
-            cb(new Error('Invalid file type. Only JPEG and PNG are allowed.'), false);
+            cb(new Error('Only image files are allowed!'), false);
         }
     }
 });
 
-// --- Define Upload Directory ---
-const TEMP_UPLOAD_DIR = path.join(__dirname, '..', 'public', 'uploads', 'temp');
-fs.mkdir(TEMP_UPLOAD_DIR, { recursive: true }).catch(console.error); 
-
-// --- NEW: Image Upload Route ---
-router.post('/api/upload-image', upload.single('image'), async (req, res) => {
-    if (!req.isAuthenticated()) {
-        console.log('Upload error: User not authenticated');
-        return res.status(401).json({ error: 'Login required to upload images.' });
-    }
-    if (!req.file) {
-        console.log('Upload error: No image file provided');
-        return res.status(400).json({ error: 'No image file uploaded.' });
-    }
-
-    const imageBuffer = req.file.buffer;
-    console.log(`Received image for upload, size: ${req.file.size} bytes`);
-
+// --- Helper Function to Save Images Locally --- 
+// (Keep this helper function defined before it's used in the routes)
+async function saveImageLocally(imageBuffer, fileName) {
+    const filePath = path.join(UPLOAD_DIR, fileName);
+    const publicUrlPath = `/uploads/${fileName}`; // URL path accessible by the browser
     try {
-        const metadata = await sharp(imageBuffer).metadata();
-        console.log(`Uploaded image metadata: ${metadata.width}x${metadata.height}, format: ${metadata.format}`);
-
-        const aspectRatio = metadata.width / metadata.height;
-        const maxDimension = 1024; 
-        let targetWidth, targetHeight;
-
-        if (metadata.width > metadata.height) {
-            targetWidth = Math.min(maxDimension, metadata.width); 
-            targetHeight = Math.round(targetWidth / aspectRatio);
-        } else {
-            targetHeight = Math.min(maxDimension, metadata.height); 
-            targetWidth = Math.round(targetHeight * aspectRatio);
-        }
-
-        targetWidth = Math.round(targetWidth / 16) * 16;
-        targetHeight = Math.round(targetHeight / 16) * 16;
-
-        targetWidth = Math.max(16, targetWidth);
-        targetHeight = Math.max(16, targetHeight);
-
-        console.log(`Resizing uploaded image to: ${targetWidth}x${targetHeight}`);
-
-        const resizedImageBuffer = await sharp(imageBuffer, { failOnError: false })
-            .resize({
-                width: targetWidth,
-                height: targetHeight,
-                fit: 'contain', 
-                position: 'center',
-                background: { r: 255, g: 255, b: 255, alpha: 1 } 
-            })
-            .png() 
-            .toBuffer();
-
-        const filename = `${req.user.id}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.png`;
-        const tempFilePath = path.join(TEMP_UPLOAD_DIR, filename);
-        await fs.writeFile(tempFilePath, resizedImageBuffer);
-        const tempImageUrl = `/uploads/temp/${filename}`; 
-        console.log(`Temporary image saved locally: ${tempFilePath}, URL: ${tempImageUrl}`);
-
-        const deletionTimeout = 15 * 60 * 1000;
-        setTimeout(async () => {
-            try {
-                await fs.unlink(tempFilePath);
-                console.log(`Deleted temporary image: ${tempFilePath}`);
-            } catch (error) {
-                if (error.code !== 'ENOENT') {
-                    console.warn(`Failed to delete temporary image ${tempFilePath}: ${error.message}`);
-                }
-            }
-        }, deletionTimeout);
-
-        res.json({ url: tempImageUrl, width: targetWidth, height: targetHeight });
-
+        await fs.writeFile(filePath, imageBuffer);
+        console.log(`[saveImageLocally] Saved image to: ${filePath}`);
+        return publicUrlPath; // Return the web-accessible URL path
     } catch (error) {
-        console.error('Image upload processing error:', error);
-        if (error.message.includes('Invalid file type')) {
-             return res.status(400).json({ error: error.message });
-        }
-        res.status(500).json({ error: 'Failed to process uploaded image.', details: error.message });
+        console.error(`[saveImageLocally] Error saving image locally: ${error}`);
+        throw new Error('Failed to save image locally.'); // Re-throw for route handler
     }
-});
+}
 
+// --- Runware Model Mapping & Costs --- 
+// const RUNWARE_MODELS = {
+//     'runware:100@1': { name: 'Runware SDXL 1.0 Base', cost: 10, steps: 30, cfgScale: 7, scheduler: 'FlowMatchEulerDiscreteScheduler' }, 
+//     'runware:101@1': { name: 'Runware SD 1.5', cost: 5, steps: 28, cfgScale: 3.5, scheduler: 'Euler' }, 
+//     'rundiffusion:130@100': { name: 'Juggernaut Pro', cost: 15, steps: 33, cfgScale: 3, scheduler: 'FlowMatchEulerDiscreteScheduler', width: 640, height: 1024 }, // Added Juggernaut
+//     'civitai:128491@132760': { name: 'Flux Schnell', cost: 8, steps: 8, cfgScale: 1.2, scheduler: 'FlowMatchEulerDiscreteScheduler', width: 1024, height: 1024 },
+//     'civitai:133005@782002': { name: 'Face / Character', cost: 12, steps: 20, cfgScale: 7.5, scheduler: 'Default', width: 640, height: 1152, isPhotoMaker: true }, // Renamed, added flag
+//     'runware:102@1': { name: 'Runware SDXL Turbo', cost: 6, steps: 8, cfgScale: 1.5, scheduler: 'EulerDiscreteScheduler', width: 1024, height: 1024 },
+// };
+
+// --- Standard Routes --- 
 router.get('/', (req, res) => {
     const isSuccess = req.query.success === 'true';
-    console.log('Rendering home, success:', isSuccess);
+    const isCanceled = req.query.canceled === 'true';
+    console.log(`Rendering home, success: ${isSuccess}, canceled: ${isCanceled}`);
     res.render('index', { 
         title: 'Pixzor AI',
         description: 'Create AI movies, images, and chat with Pixzor',
         layout: 'layouts/layout',
         includeChat: true,
-        requestPath: req.path
+        requestPath: req.path,
+        successMessage: isSuccess ? 'Token purchase successful!' : null,
+        cancelMessage: isCanceled ? 'Token purchase canceled.' : null,
+        user: req.user, // Pass user info for header
+        runwareModels: RUNWARE_MODELS, // Pass models to the view
+        promptBasedStyles: PROMPT_BASED_STYLES // Pass curated styles to the view
     });
 });
 
-// --- NEW: Together AI Image Generation Route ---
-router.post('/api/generate-image', express.json(), async (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ error: 'Login required' });
-
-    const {
-        prompt,
-        aspectRatio, // e.g., "1:1", "16:9"
-        model: modelName, // e.g., "FLUX.1 Depth"
-        imageUrl, // Optional: URL from /api/upload-image
-        imageWidth, // Optional: Width from /api/upload-image
-        imageHeight, // Optional: Height from /api/upload-image
-        strength // Optional: Strength value (0-1)
-    } = req.body;
-    const userId = req.user.id;
-
-    if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
-    if (!modelName) return res.status(400).json({ error: 'Model selection is required' });
-
-    // --- Model Mapping & Cost ---
-    const modelMap = {
-        'FLUX.1 Schnell': { id: 'black-forest-labs/FLUX.1-schnell', cost: 1, control: null, minSize: true },
-        'FLUX Dev': { id: 'black-forest-labs/FLUX.1-dev', cost: 10, control: null, minSize: true },
-        'FLUX.1.1-pro': { id: 'black-forest-labs/FLUX.1.1-pro', cost: 10, control: null, minSize: true },
-        'FLUX.1 Canny': { id: 'black-forest-labs/FLUX.1-canny', cost: 10, control: 'canny', minSize: false },
-        'FLUX.1 Depth': { id: 'black-forest-labs/FLUX.1-depth', cost: 10, control: 'depth', minSize: false },
-        'FLUX.1 Redux': { id: 'black-forest-labs/FLUX.1-redux', cost: 10, control: 'redux', minSize: false }
-    };
-
-    const selectedModel = modelMap[modelName];
-    if (!selectedModel) return res.status(400).json({ error: 'Invalid model selected' });
-
-    const tokenCost = selectedModel.cost;
-    const togetherModelId = selectedModel.id;
-    const controlType = selectedModel.control;
-    const isImageToImage = !!controlType;
-    const useMinSize = !!selectedModel.minSize;
-
-    // --- Input Validation for Img2Img ---
-    if (isImageToImage && !['FLUX.1 Schnell', 'FLUX.1.1-pro', 'FLUX Dev'].includes(modelName)) {
-        if (!imageUrl || !imageWidth || !imageHeight) {
-            return res.status(400).json({ error: 'Image URL and dimensions are required for this model.' });
-        }
-        if (isNaN(parseFloat(strength)) || strength < 0 || strength > 1) {
-             console.warn(`Invalid strength received: ${strength}. Using default 0.85`);
-             strength = 0.85; // Default strength if invalid
-        }
-    } else if (imageUrl) {
-        console.warn('Image provided but model does not support image input. Ignoring image.');
-        // Clear img2img variables if not applicable
-        imageUrl = null;
-        imageWidth = null;
-        imageHeight = null;
-        strength = null;
-    }
-
-    // --- Aspect Ratio to Width/Height ---
-    // Assuming base 1024x1024, adjust based on ratio
-    let outputWidth, outputHeight;
-    if (useMinSize) {
-        // Low-res for FLUX.1 Schnell and FLUX.1.1-pro
-        if (aspectRatio === '1:1') {
-            outputWidth = 512;
-            outputHeight = 512;
-        } else if (aspectRatio === '16:9') {
-            outputWidth = 656;
-            outputHeight = 368;
-        } else if (aspectRatio === '9:16') {
-            outputWidth = 368;
-            outputHeight = 656;
-        } else {
-            outputWidth = 512;
-            outputHeight = 512;
-        }
-        // Ensure multiples of 16
-        outputWidth = Math.floor(outputWidth / 16) * 16;
-        outputHeight = Math.floor(outputHeight / 16) * 16;
-        outputWidth = Math.max(16, outputWidth);
-        outputHeight = Math.max(16, outputHeight);
-    } else {
-        outputWidth = 1024;
-        outputHeight = 1024;
-        if (aspectRatio && aspectRatio !== '1:1') {
-            const [ratioW, ratioH] = aspectRatio.split(':').map(Number);
-            if (ratioW > ratioH) {
-                outputHeight = Math.round(outputWidth * (ratioH / ratioW));
-            } else if (ratioH > ratioW) {
-                outputWidth = Math.round(outputHeight * (ratioW / ratioH));
-            }
-            outputWidth = Math.round(outputWidth / 16) * 16;
-            outputHeight = Math.round(outputHeight / 16) * 16;
-            outputWidth = Math.max(16, outputWidth);
-            outputHeight = Math.max(16, outputHeight);
-        }
-    }
-    console.log(`Output dimensions set to: ${outputWidth}x${outputHeight}`);
-
-    try {
-        const user = await User.findByPk(userId);
-        if (!user) return res.status(404).json({ error: 'User not found' });
-        if (user.tokens < tokenCost) return res.status(402).json({ error: 'Not enough tokens' }); // 402 Payment Required
-
-        // --- Prepare Together AI Payload ---
-        const payload = {
-            model: togetherModelId,
-            prompt: prompt,
-            n: 1, // Generate 1 image
-            steps: 12, // Together AI only allows 1-12 steps
-            cfg_scale: isImageToImage ? 3.5 : 4.5, // Adjust cfg_scale for img2img
-            width: outputWidth,
-            height: outputHeight,
-            seed: Math.floor(Math.random() * 1000000), // Random seed
-        };
-
-        if (isImageToImage) {
-            payload.control_type = controlType;
-            payload.control_strength = 0.7; // Default control strength, can be adjusted
-            payload.strength = parseFloat(strength); // Image-to-image strength
-            // Construct absolute URL for the image_url if it's relative
-            const absoluteImageUrl = imageUrl.startsWith('http') ? imageUrl : `${process.env.APP_BASE_URL}${imageUrl}`;
-            payload.image_url = absoluteImageUrl;
-             console.log(`Using image for generation: ${payload.image_url}, strength: ${payload.strength}, control: ${payload.control_type}`);
-        }
-
-        console.log(`Calling Together AI API (${togetherModelId}) for user ${userId}...`);
-        console.log('Payload:', JSON.stringify(payload, null, 2));
-        // --- Call Together AI API with retry if reference image fails ---
-        let togetherResponse, togetherResult, togetherError;
-        for (let attempt = 1; attempt <= 3; attempt++) {
-            togetherResponse = await fetch(
-                'https://api.together.xyz/v1/images/generations',
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${process.env.TOGETHER_API_KEY}`,
-                        'User-Agent': 'PixzorApp/1.0'
-                    },
-                    body: JSON.stringify(payload),
-                }
-            );
-            if (togetherResponse.ok) {
-                togetherResult = await togetherResponse.json();
-                if (!togetherResult.error || !togetherResult.error.message.includes('invalid reference image')) {
-                    break;
-                } else {
-                    togetherError = togetherResult.error.message;
-                }
-            } else {
-                togetherError = await togetherResponse.text();
-                try { togetherError = JSON.parse(togetherError); } catch (e) {}
-                if (typeof togetherError === 'object' && togetherError?.error?.message && togetherError.error.message.includes('invalid reference image')) {
-                    // retry
-                } else {
-                    break;
-                }
-            }
-            if (attempt < 3) {
-                console.warn(`Attempt ${attempt} failed: invalid reference image. Retrying in 5s...`);
-                await new Promise(resolve => setTimeout(resolve, 5000));
-            }
-        }
-        if (!togetherResponse.ok || (togetherResult && togetherResult.error)) {
-            let userMessage = `Together AI API failed: ${togetherResponse.status}`;
-            if (togetherResult && togetherResult.error && togetherResult.error.message) {
-                userMessage = `API Error: ${togetherResult.error.message}`;
-            } else if (typeof togetherError === 'string') {
-                userMessage = togetherError;
-            }
-            throw new Error(userMessage);
-        }
-        let result = togetherResult || await togetherResponse.json();
-        console.log('Together AI API Success:', result);
-
-        if (!togetherResponse.ok) {
-            let errorDetails = await togetherResponse.text();
-            try { errorDetails = JSON.parse(errorDetails); } catch (e) { /* Keep as text if not JSON */ }
-            console.error('Together AI API Error:', togetherResponse.status, errorDetails);
-            // Provide a more specific error if possible
-            let userMessage = `Together AI API failed: ${togetherResponse.status}`;
-            if (typeof errorDetails === 'object' && errorDetails?.error?.message) {
-                 userMessage = `API Error: ${errorDetails.error.message}`;
-                 // Handle specific known errors, like invalid reference image
-                 if (errorDetails.error.message.includes('invalid reference image')) {
-                     userMessage = 'Error: The reference image could not be processed. Please try a different image or check its format/URL.';
-                 }
-            } else if (typeof errorDetails === 'string' && errorDetails.includes('invalid reference image')) {
-                 userMessage = 'Error: The reference image could not be processed. Please try a different image or check its format/URL.';
-            }
-            throw new Error(userMessage);
-        }
-
-        result = await togetherResponse.json();
-        console.log('Together AI API Success:', result);
-
-        if (!result.data || result.data.length === 0 || !result.data[0].url) {
-             throw new Error('Together AI response did not contain a valid image URL.');
-        }
-
-        const generatedImageUrl = result.data[0].url;
-
-        // --- Download the generated image ---
-        console.log(`Downloading generated image from: ${generatedImageUrl}`);
-        const imageDownloadResponse = await fetch(generatedImageUrl);
-        if (!imageDownloadResponse.ok) {
-            throw new Error(`Failed to download generated image: ${imageDownloadResponse.status}`);
-        }
-        const imageBuffer = Buffer.from(await imageDownloadResponse.arrayBuffer());
-        const contentType = imageDownloadResponse.headers.get('content-type') || 'image/png'; // Default to png
-        const fileExtension = contentType.split('/')[1] || 'png';
-
-        // --- Save image permanently ---
-        const userImageDir = path.join(__dirname, '..', 'public', 'images', 'generated', userId.toString());
-        await fs.mkdir(userImageDir, { recursive: true });
-
-        const finalFilename = `${Date.now()}.${fileExtension}`;
-        const finalImagePath = path.join(userImageDir, finalFilename);
-        await fs.writeFile(finalImagePath, imageBuffer);
-        console.log(`Generated image saved to: ${finalImagePath}`);
-
-        const finalImageUrl = `/images/generated/${userId}/${finalFilename}`; // URL for client
-
-        // --- Update DB ---
-        user.tokens = parseFloat(user.tokens) - tokenCost;
-        await user.save();
-
-        await GeneratedContent.create({
-            userId,
-            type: 'image',
-            contentUrl: finalImageUrl,
-            prompt,
-            model: modelName, // Store the user-facing model name
-            tokenCost,
-            // Optionally store other details like seed, dimensions, etc.
-            width: outputWidth,
-            height: outputHeight,
-            seed: payload.seed,
-            isPublic: false // Default to private
-        });
-
-        console.log(`Tokens deducted. User ${userId} remaining tokens: ${user.tokens}`);
-
-        // --- Respond to client ---
-        res.json({
-            imageUrl: finalImageUrl,
-            tokenCost,
-            remainingTokens: user.tokens,
-            prompt: prompt, // Echo back prompt
-            // Include other useful info if needed
-             width: outputWidth,
-             height: outputHeight,
-             model: modelName
-        });
-
-    } catch (error) {
-        console.error('Error during Together AI image generation:', error);
-        res.status(500).json({ error: error.message || 'Failed to generate image' });
-    }
-});
-// --- END: Together AI Image Generation Route ---
-
-// --- ADDED IMAGE DETAIL ROUTE HERE ---
 router.get('/image/:id', async (req, res) => {
     try {
         const contentId = req.params.id;
@@ -410,7 +152,7 @@ router.get('/image/:id', async (req, res) => {
         console.log(`[Image Detail Page] Rendering page for content ID: ${contentId}`);
 
         res.render('image-detail', { 
-            title: `Image: ${item.prompt.substring(0, 30)}...`, 
+            title: `Image: ${item.prompt ? item.prompt.substring(0, 30) : 'Details'}...`, 
             item: item, 
             user: req.user, 
             contentId: item.id,
@@ -425,21 +167,26 @@ router.get('/image/:id', async (req, res) => {
 });
 
 router.get('/partials/modals', (req, res) => {
-    res.render('partials/modals', { layout: false });
+    res.render('partials/modals', { layout: false, user: req.user }); // Pass user data
 });
 
 router.get('/chat-tab/:tab', (req, res) => {
     const { tab } = req.params;
-    const validTabs = ['chat', 'create-images', 'create-videos'];
+    const validTabs = ['chat', 'create-images', 'create-videos']; 
     if (!validTabs.includes(tab)) {
         return res.status(404).send('Tab not found');
     }
-    if (tab === 'chat') {
-        res.render('partials/chat-tab', { layout: false });
-    } else if (tab === 'create-images') {
-        res.render('partials/create-images', { layout: false });
-    } else if (tab === 'create-videos') {
-        res.render('partials/create-videos', { layout: false });
+    try {
+        // Pass user and runware models to the create-images tab partial
+        const viewData = {
+            layout: false, 
+            user: req.user,
+            runwareModels: RUNWARE_MODELS // Pass models for the dropdown
+        };
+        res.render(`partials/${tab}`, viewData); 
+    } catch (err) {
+        console.error(`Error rendering partial for tab ${tab}:`, err);
+        res.status(500).send('Error loading tab content.');
     }
 });
 
@@ -455,11 +202,12 @@ router.post('/buy-tokens', express.json(), async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ error: 'Login required' });
     const { tokens, price } = req.body;
     const validBundles = {
-        '300': 300,
-        '500': 500,
-        '1200': 1000
+        '300': 300,  
+        '500': 500, 
+        '1200': 1000 
     };
     if (!validBundles[tokens] || validBundles[tokens] !== parseFloat(price) * 100) {
+         console.error(`Invalid token bundle or price mismatch. Received tokens: ${tokens}, price: ${price}. Expected price: ${validBundles[tokens]/100}`);
         return res.status(400).json({ error: 'Invalid token bundle or price mismatch' });
     }
     try {
@@ -467,20 +215,20 @@ router.post('/buy-tokens', express.json(), async (req, res) => {
             payment_method_types: ['card'],
             line_items: [{
                 price_data: {
-                    currency: 'gbp',
+                    currency: 'gbp', 
                     product_data: { name: `${tokens} Tokens` },
-                    unit_amount: validBundles[tokens],
+                    unit_amount: validBundles[tokens], // Price in pence
                 },
                 quantity: 1,
             }],
             mode: 'payment',
-            success_url: `${process.env.APP_BASE_URL}/success`,
-            cancel_url: `${process.env.APP_BASE_URL}/?canceled=true`,
-            metadata: { userId: req.user.id, tokens },
+            success_url: `${process.env.APP_BASE_URL || 'http://localhost:3000'}/success?session_id={CHECKOUT_SESSION_ID}`, 
+            cancel_url: `${process.env.APP_BASE_URL || 'http://localhost:3000'}/?canceled=true`,
+            metadata: { userId: req.user.id, tokens: tokens }, 
         });
         res.json({ url: session.url });
     } catch (error) {
-        console.error('Error creating checkout session:', error);
+        console.error('Error creating Stripe checkout session:', error);
         res.status(500).json({ error: 'Failed to create checkout session' });
     }
 });
@@ -490,8 +238,355 @@ router.get('/success', async (req, res) => {
         console.log('Unauthenticated user redirected from /success to /');
         return res.redirect('/');
     }
-    console.log('Payment success, redirecting to /?success=true for user:', req.user.id);
-    res.redirect('/?success=true');
+    const sessionId = req.query.session_id;
+    if (!sessionId) {
+        console.log('[Success Route] No session ID provided. Redirecting.');
+        return res.redirect('/?error=payment_error');
+    }
+
+    // Here you would typically verify the session with Stripe
+    // But for simplicity in this flow, we just redirect assuming success
+    // If implementing verification, handle potential errors (e.g., session not paid)
+    console.log(`[Success Route] User ${req.user.id} returned with session ID ${sessionId}. Redirecting to home with success flag.`);
+    
+    res.redirect('/?success=true'); 
+});
+
+// --- NEW: Runware Image-to-Image Route --- 
+router.post('/image-to-image', upload.single('image'), async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ error: 'Login required' });
+
+    // Get text fields from req.body (populated by multer)
+    const { modelId, prompt, strength, aspectRatio, style, styleLabel, negativePromptOverride } = req.body; // Use 'style' to match demo
+ 
+    const userId = req.user.id;
+    const parsedStrength = parseFloat(strength) || 0.75; // Use default if invalid
+
+    console.log(`[Image-to-Image Route] Received style: ${style}`);
+
+    console.log(`[Image-to-Image] Received: modelId='${modelId}', prompt='${prompt}', strength='${strength}', userId=${userId}`);
+
+    // Check if file was uploaded
+    if (!req.file) {
+        console.error('[Image-to-Image] No image file uploaded.');
+        return res.status(400).json({ error: 'Image file is required' });
+    }
+
+    let originalWidth, originalHeight;
+    try {
+        const metadata = await sharp(req.file.buffer).metadata();
+        originalWidth = metadata.width;
+        originalHeight = metadata.height;
+        if (!originalWidth || !originalHeight) {
+            throw new Error('Could not read image dimensions.');
+        }
+        console.log(`[Image-to-Image] Original dimensions: ${originalWidth}x${originalHeight}`);
+    } catch (err) {
+        console.error('[Image-to-Image] Error reading image metadata:', err);
+        return res.status(400).json({ error: 'Could not process uploaded image file.' });
+    }
+
+    // --- Calculate Target Dimensions (Maintain Aspect Ratio, Target ~1MP, Multiple of 64) ---
+    const MAX_DIMENSION = 1024; // Target for the longer side
+    const MIN_DIMENSION = 64;   // Minimum dimension allowed
+    const MULTIPLE = 64;
+
+    let targetWidth, targetHeight;
+    const aspectRatioValue = originalWidth / originalHeight;
+
+    if (originalWidth > originalHeight) {
+        targetWidth = Math.min(MAX_DIMENSION, originalWidth); // Don't upscale beyond MAX if original is large
+        targetHeight = targetWidth / aspectRatioValue;
+    } else {
+        targetHeight = Math.min(MAX_DIMENSION, originalHeight);
+        targetWidth = targetHeight * aspectRatioValue;
+    }
+
+    // Round DOWN to the nearest multiple of 64, ensuring minimum size
+    targetWidth = Math.max(MIN_DIMENSION, Math.floor(targetWidth / MULTIPLE) * MULTIPLE);
+    targetHeight = Math.max(MIN_DIMENSION, Math.floor(targetHeight / MULTIPLE) * MULTIPLE);
+
+    console.log(`[Image-to-Image] Calculated target dimensions: ${targetWidth}x${targetHeight}`);
+    // ----------------------------------------------------------------------------------
+
+    // Validate modelId
+    const selectedModelInfo = RUNWARE_MODELS[modelId];
+    console.log('[Image-to-Image] Found selectedModelInfo:', selectedModelInfo);
+    if (!selectedModelInfo) {
+        console.error(`[Image-to-Image] Invalid modelId received: ${modelId}`);
+        return res.status(400).json({ error: 'Invalid model selected' });
+    }
+
+    // Validate prompt (optional, but good practice)
+    if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+         console.error(`[Image-to-Image] Invalid or missing prompt: ${prompt}`);
+        return res.status(400).json({ error: 'A text prompt is required' });
+    }
+
+    // Check model cost and user tokens
+    if (typeof selectedModelInfo.cost !== 'number') {
+        console.error(`[Image-to-Image] Invalid cost for model ${modelId}: ${selectedModelInfo.cost}`);
+        return res.status(500).json({ error: 'Internal error: Invalid model cost' });
+    }
+    if (req.user.tokens < selectedModelInfo.cost) {
+        console.log(`[Image-to-Image] Insufficient tokens for user ${userId} to generate image with model ${modelId}. Tokens: ${req.user.tokens}, Cost: ${selectedModelInfo.cost}`);
+        return res.status(402).json({ error: 'Insufficient tokens' });
+    }
+
+    try {
+        // Convert uploaded image buffer to base64 for Runware SDK
+        const imageBase64 = req.file.buffer.toString('base64');
+
+        let generatedImageUrl;
+        let actualCost;
+        let runwareImageUUID;
+
+        if (selectedModelInfo.isPhotoMaker) {
+            // --- PhotoMaker Specific Logic --- 
+            console.log(`[Image-to-Image] Using PhotoMaker specific logic for model ${modelId}`);
+            // Validate strength for PhotoMaker (e.g., 15-50, adjust as needed)
+            const photoMakerStrength = Math.max(15, Math.min(50, parseInt(strength, 10) || 15));
+
+            console.log('[Image-to-Image Route] Passing to calculateDimensionsForRatio:', aspectRatio || '1:1');
+            const { width: photoMakerWidth, height: photoMakerHeight } = calculateDimensionsForRatio(aspectRatio || '1:1', 1024);
+            console.log(`[Image-to-Image] PhotoMaker using selected ratio '${aspectRatio || '1:1'}', base 1024, calculated dims: ${photoMakerWidth}x${photoMakerHeight}`);
+
+            const photoMakerPayload = {
+                taskType: 'photoMaker',
+                model: modelId,
+                taskUUID: uuidv4(), // Add the required task UUID
+                positivePrompt: prompt.trim(),
+                negativePrompt: 'deformed, blurry, bad anatomy, worst quality', // Example negative prompt
+                steps: selectedModelInfo.steps,
+                CFGScale: selectedModelInfo.cfgScale,
+                width: photoMakerWidth,  // Use calculated dimensions based on selected ratio
+                height: photoMakerHeight,
+                inputImages: [`data:${req.file.mimetype};base64,${imageBase64}`], // Array with base64 data URI
+                style: (style || 'photographic').toLowerCase(), // Add style like in demo
+                strength: photoMakerStrength,
+                outputType: ['URL'],
+                includeCost: true,
+                numberResults: 1 // Ensure we only ask for one result
+            };
+
+            console.log('[Image-to-Image] PhotoMaker Payload:', JSON.stringify(photoMakerPayload).substring(0, 500) + '...'); // Log payload (truncated base64)
+
+            try {
+                console.log('[Image-to-Image] Calling Runware API directly via axios for PhotoMaker:', photoMakerPayload);
+                const response = await axios.post(
+                    'https://api.runware.ai/v1',
+                    [photoMakerPayload], // API expects an array of tasks
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${process.env.RUNWARE_API_KEY}`,
+                            'Content-Type': 'application/json',
+                        },
+                        timeout: 120000, // 2 minute timeout
+                    }
+                );
+                
+                console.log('[Image-to-Image] Raw PhotoMaker API Response:', JSON.stringify(response.data, null, 2));
+                
+                if (!response.data || !response.data.data || !Array.isArray(response.data.data) || response.data.data.length === 0) {
+                    throw new Error('Invalid API response from PhotoMaker: No images returned or invalid format.');
+                }
+                
+                const firstImageResult = response.data.data[0];
+                if (!firstImageResult.imageURL || typeof firstImageResult.cost === 'undefined') {
+                     throw new Error('Invalid API response from PhotoMaker: Missing imageURL or cost.');
+                }
+                
+                generatedImageUrl = firstImageResult.imageURL;
+                actualCost = firstImageResult.cost;
+                runwareImageUUID = firstImageResult.imageUUID; // Get UUID if available
+                console.log(`[Image-to-Image] PhotoMaker result: URL=${generatedImageUrl}, Cost=${actualCost}, UUID=${runwareImageUUID}`);
+
+            } catch (axiosError) {
+                 console.error('[Image-to-Image] Axios error calling PhotoMaker API:', axiosError.response ? JSON.stringify(axiosError.response.data) : axiosError.message);
+                 throw new Error(`Failed to generate image using PhotoMaker: ${axiosError.message}`);
+            }
+            // --- End PhotoMaker Specific Logic --- 
+        } else {
+            // --- Standard Image-to-Image Logic --- 
+            console.log(`[Image-to-Image] Using standard SDK call for model ${modelId} with strength: ${parsedStrength}`);
+            
+            // Construct params object for standard call
+            const params = {
+                taskType: 'imageInference',
+                taskUUID: uuidv4(),
+                positivePrompt: styleLabel ? `${prompt.trim()}, ${styleLabel} style` : prompt.trim(), // Append style label AND 'style' keyword
+                negativePrompt: negativePromptOverride, // Use the style-specific NP from the hidden input
+                model: modelId,
+                seedImage: `data:${req.file.mimetype};base64,${imageBase64}`, // Add data URI prefix
+                width: targetWidth,
+                height: targetHeight,
+                strength: parsedStrength,
+                steps: selectedModelInfo.steps,
+                CFGScale: selectedModelInfo.cfgScale,
+                scheduler: selectedModelInfo.scheduler,
+                outputFormat: 'JPEG',
+                numberResults: 1,
+                outputType: ['URL'],
+                includeCost: true,
+                ...(style && style !== '' && { lora: [{ model: style, weight: 1.0 }] }) // Add lora for style like demo
+            };
+
+            console.log('[Image-to-Image] Final Constructed Prompts -> Positive:', params.positivePrompt, '|| Negative:', params.negativePrompt);
+
+            console.log('[Image-to-Image] Standard SDK Params:', {
+                ...params,
+                seedImage: params.seedImage ? '<base64_string_hidden>' : 'undefined',
+            });
+
+            const result = await generateImageToImage(runware, params);
+
+            if (!result || result.length === 0) {
+                throw new Error("Standard Image generation returned no results.");
+            }
+            const firstImage = result[0];
+            generatedImageUrl = firstImage.imageURL;
+            actualCost = firstImage.cost;
+            runwareImageUUID = firstImage.imageUUID;
+            console.log(`[Image-to-Image] Standard result: URL=${generatedImageUrl}, Cost=${actualCost}, UUID=${runwareImageUUID}`);
+            // --- End Standard Image-to-Image Logic --- 
+        }
+
+        // --- Shared Logic: Verify Cost, Save Image, Deduct Tokens, Send Response ---
+        // Verify user has enough tokens based on actual cost (redundant check, but safe)
+        const user = await User.findByPk(userId);
+        if (user.tokens < actualCost) {
+             console.error(`[Image-to-Image] Insufficient tokens for user ${userId} based on actual cost. Tokens: ${user.tokens}, Actual Cost: ${actualCost}`);
+             // Note: We already deducted based on estimated cost, this check might be too late if API cost is higher.
+             // Consider how to handle this discrepancy if it's a major issue.
+            // For now, we proceed but log the error.
+        }
+
+        // Use the predefined cost for deduction, log the actual API cost
+        const costToDeduct = selectedModelInfo.cost;
+        console.log(`[Image-to-Image] Cost to deduct: ${costToDeduct}, Actual API cost: ${actualCost}`);
+
+        // Save the image locally
+        const imageBuffer = await fetch(generatedImageUrl).then(res => res.buffer()); // Use the URL from either branch
+        const uniqueFilename = `${uuidv4()}.png`;
+        const localSavePath = await saveImageLocally(imageBuffer, uniqueFilename);
+        const filename = path.basename(localSavePath);
+        const publicImageUrl = `/uploads/${filename}`; // Corrected path
+
+        console.log('[Image-to-Image] Constructed publicImageUrl:', publicImageUrl);
+
+        // Save metadata to DB
+        await GeneratedContent.create({
+            userId: userId,
+            prompt: prompt.trim(), // Use trimmed prompt
+            modelUsed: modelId,
+            contentUrl: publicImageUrl,
+            tokenCost: costToDeduct, // Log the deducted cost
+            isPublic: false,
+            type: 'image', // Add the type field
+            metadata: JSON.stringify({
+                runwareImageUUID: runwareImageUUID || null, // Use captured UUID
+                originalUrl: generatedImageUrl, // Use captured URL
+                apiCost: actualCost // Optionally store the actual API cost in metadata
+            })
+        });
+
+        // Deduct tokens using the predefined cost
+        await User.update({ tokens: sequelize.literal(`tokens - ${costToDeduct}`) }, { where: { id: userId } });
+
+        // Send back the public URL of the locally saved image
+        res.json({ imageUrl: publicImageUrl, cost: costToDeduct }); // Return the deducted cost
+
+    } catch (error) {
+        console.error(`Error generating image-to-image for user ${userId} with model ${modelId}:`, error);
+        res.status(500).json({ error: 'Failed to generate image' });
+    }
+});
+
+// --- NEW: Define Multer Locally for Upload API --- 
+const generalDiskStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+  filename: (req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`) // Unique filename
+});
+
+const generalUpload = multer({ 
+    storage: generalDiskStorage, 
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+    fileFilter: (req, file, cb) => { // Add basic file filter
+        const allowedTypes = /jpeg|jpg|png|webp/;
+        const mimetype = allowedTypes.test(file.mimetype);
+        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+        if (mimetype && extname) {
+            return cb(null, true);
+        }
+        cb(new Error('Error: File upload only supports the following filetypes - ' + allowedTypes));
+    }
+}).single('image'); // Use .single here as it's middleware for ONE file named 'image'
+
+// --- NEW: Image Upload Endpoint (Using locally defined generalUpload) --- 
+router.post('/api/upload-image', (req, res, next) => {
+    // Apply the multer middleware
+    generalUpload(req, res, function (err) {
+        if (err instanceof multer.MulterError) {
+            // A Multer error occurred (e.g., file size limit).
+            console.error('[Upload API] Multer error:', err);
+            return res.status(400).json({ error: `Upload error: ${err.message}` });
+        } else if (err) {
+            // An unknown error occurred (e.g., file type filter).
+            console.error('[Upload API] Unknown upload error:', err);
+             return res.status(400).json({ error: err.message || 'Invalid file type.' });
+        }
+        // If no errors, proceed to the main route logic
+        next();
+    });
+}, async (req, res) => {
+    // This part runs *after* multer successfully processes the upload
+    if (!req.isAuthenticated()) {
+        // This check might be redundant if you have global auth middleware, but safe to keep
+        return res.status(401).json({ error: 'Login required' });
+    }
+
+    if (!req.file) {
+        // This case should ideally be caught by multer errors, but check just in case
+        console.error('[Upload API] File object missing after multer.');
+        return res.status(400).json({ error: 'No image file provided or upload failed.' });
+    }
+
+    console.log(`[Upload API] File received: ${req.file.filename}, Size: ${req.file.size}`);
+
+    // --- Optional: Post-upload Validation (Sharp validation can be complex here)
+    // Since multer's fileFilter handles types, sharp might only be needed for more complex checks (dimensions, etc.)
+    // For simplicity, we'll rely on the fileFilter for now.
+    // try {
+    //     const metadata = await sharp(req.file.path).metadata();
+    //     console.log(`[Upload API] Valid image uploaded: ${req.file.filename}, Format: ${metadata.format}`);
+    // } catch (sharpError) { ... }
+    // --- End Optional Validation ---
+
+    // Construct the URL to the uploaded file
+    const fileUrl = `/uploads/${req.file.filename}`;
+
+    res.json({
+        message: 'Image uploaded successfully',
+        imageUrl: fileUrl,
+        filename: req.file.filename
+    });
+});
+// --- END NEW ---
+
+// ... rest of the code remains the same ...
+
+// --- NEW: Add the missing GET / route handler --- 
+router.get('/', (req, res) => {
+    console.log('[Route /] Rendering homepage.');
+    console.log('[Route /] Data being passed to template:', JSON.stringify(RUNWARE_MODELS, null, 2));
+    // Render the index view (which uses the layout) and pass necessary data
+    res.render('index', {
+        title: 'Pixzor AI', // Example title
+        description: 'Create consistent characters, stylize images or make movies.', // Example description
+        runwareModels: RUNWARE_MODELS, // Pass the imported models config
+        promptBasedStyles: PROMPT_BASED_STYLES, // Pass the imported styles config
+        includeChat: true // Assuming the chat should be included on the homepage
+    });
 });
 
 module.exports = router;

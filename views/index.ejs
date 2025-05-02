@@ -1,5 +1,18 @@
 <!-- views/index.ejs -->
-<section class="text-center py-12">
-    <h1 class="text-4xl font-bold text-green-400 mb-4"><%= title %></h1>
-    <p class="text-lg text-gray-300">Start chatting or creating below!</p>
-</section>
+<div 
+    id="advert-container" 
+    class="bg-cover bg-center mx-auto flex flex-col justify-start items-center text-center pt-8"
+    style="max-width: 785px; height: 520px;"
+>
+    <h1 class="text-4xl font-bold text-white">Pixzor</h1>
+    <p class="text-lg text-gray-300">Create consistent characters, stylize images or make movies.</p>
+</div>
+
+<script>
+    // Make backend data available to frontend scripts
+    // Use <%- %> for unescaped JSON output
+    window.RUNWARE_MODELS = <%- JSON.stringify(runwareModels || {}) %>;
+    window.PROMPT_BASED_STYLES = <%- JSON.stringify(promptBasedStyles || []) %>;
+    // Placeholder if we need the original full style list later
+    // window.ORIGINAL_STYLES = []; // Example: Assign empty array if needed later
+</script>

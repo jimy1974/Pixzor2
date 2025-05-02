@@ -84,6 +84,7 @@ async function loadComments(contentId) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         const comments = await response.json();
+        console.log('[loadComments] Raw comments received from API:', comments); // Log raw data
         if (comments.length === 0) {
             commentsList.innerHTML = '<li class="text-gray-400 italic">No comments yet.</li>';
         } else {
@@ -94,7 +95,7 @@ async function loadComments(contentId) {
                         <span class="font-semibold text-sm mr-2">${comment.user.username}</span>
                         <span class="text-gray-400 text-xs">${new Date(comment.createdAt).toLocaleString()}</span>
                     </div>
-                    <p class="text-gray-300 text-sm break-words">${escapeHTML(comment.text)}</p>
+                    <p class="text-gray-300 text-sm break-words">${escapeHTML(comment.commentText)}</p>
                 </li>
             `).join('');
         }
@@ -127,7 +128,7 @@ async function postComment(contentId) {
                 'Content-Type': 'application/json',
                 // Add CSRF token header if needed by your backend setup
             },
-            body: JSON.stringify({ commentText: commentText })
+            body: JSON.stringify({ text: commentText }) // Changed 'commentText' to 'text'
         });
         const result = await response.json();
         if (!response.ok) {
@@ -192,8 +193,15 @@ function openCommentsModal(contentId, imageUrl) {
     elements.modalUsername.textContent = 'Loading...';
     elements.modalModelElement.textContent = '';
     elements.modalImage.src = imageUrl || ''; 
-    elements.downloadButton.href = imageUrl || '#';
-    elements.downloadButton.download = `pixzor_content_${contentId}.jpg`;
+    
+    // Point download button to the proxy route
+    if (elements.downloadButton) {
+        elements.downloadButton.href = `/api/download-image/${contentId}`; 
+        // Keep the download attribute as a fallback/suggestion, though Content-Disposition should take precedence
+        elements.downloadButton.download = `pixzor_content_${contentId}.jpg`; 
+    } else {
+        console.error('[gallery.js] Download button element not found in modal.');
+    }
 
     // Enable/disable comment input based on login status
     if (window.isLoggedIn) {
@@ -235,7 +243,11 @@ function openCommentsModal(contentId, imageUrl) {
     };
 
     elements.postCommentButton.onclick = () => {
-        if (currentContentId) {
+        // If the button is disabled (because user is not logged in), show the toast
+        if (elements.postCommentButton.disabled) {
+             showToast("Please Login to comment", "info");
+        } else if (currentContentId) {
+             // Otherwise (if enabled and logged in), proceed with posting
             postComment(currentContentId);
         }
     };
@@ -286,7 +298,7 @@ function openCommentsModal(contentId, imageUrl) {
         .then(response => response.ok ? response.json() : Promise.reject('Failed to load details'))
         .then(data => {
             elements.modalPrompt.textContent = data.prompt || 'No prompt available.';
-            elements.modalUsername.textContent = data.username || 'Unknown';
+            elements.modalUsername.textContent = data.user?.username || 'Unknown'; 
             if (data.model) {
                 elements.modalModelElement.textContent = data.model;
                 elements.modelContainer.classList.remove('hidden');
@@ -312,6 +324,12 @@ function openCommentsModal(contentId, imageUrl) {
 
 // --- Helper: Escape HTML --- 
 function escapeHTML(str) {
+    // Add null/undefined check and logging
+    if (str === null || typeof str === 'undefined') {
+        console.warn('[escapeHTML] Received null or undefined input.');
+        return ''; 
+    }
+    console.log('[escapeHTML] Input string:', str); // Log input
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
@@ -324,32 +342,32 @@ function createImageCard(image) {
     imageCard.dataset.id = image.id;
     imageCard.id = `image-card-${image.id}`;
 
-    // Using thumbnailUrl for the card display
+    // Using thumbnailUrl for the card display, fallback to contentUrl
     imageCard.innerHTML = `
         <div class="relative group">
-            <img src="${image.thumbnailUrl}" 
-                 alt="${image.prompt?.substring(0, 50) || 'AI Content'}..." 
-                 class="w-full rounded-lg cursor-pointer block object-cover" 
-                 loading="lazy" />
+            <img src="${image.thumbnailUrl ?? image.contentUrl}" 
+                  alt="${image.prompt?.substring(0, 50) || 'AI Content'}..." 
+                  class="w-full rounded-lg cursor-pointer block object-cover" 
+                  loading="lazy" />
         </div>
     `;
     return imageCard;
 }
 
 // --- Load Images Function ---
-async function loadImages(endpoint) {
+async function loadImages() {
     if (isLoading || !hasMoreImages) return;
     isLoading = true;
     const loadingIndicator = document.getElementById('loading-indicator'); 
     if(loadingIndicator) loadingIndicator.style.display = 'block';
 
     try {
-        const response = await fetch(`${endpoint}?page=${page}`);
+        const response = await fetch(`/api/gallery-content?page=${page}`);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        const images = data.images;
+        const images = data.items; // API returns 'items' array
         const imageList = document.getElementById('image-list');
 
         if (!imageList || !window.masonryInstance) {

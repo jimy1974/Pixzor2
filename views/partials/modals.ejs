@@ -13,39 +13,43 @@
 } -->
 
 <!-- BUY TOKENS MODAL -->
-<div id="buy-tokens-modal" class="modal">
+<div id="buy-tokens-modal" class="modal hidden fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center">
   <div class="modal-backdrop"></div>
   <div class="modal-content w-full max-w-md mx-auto relative">
     <button
       id="close-buy-tokens-modal"
       class="absolute top-2 right-2 text-gray-800 hover:text-gray-900"
     >&times;</button>
-    <h2 class="text-xl font-bold mb-4 text-gray-900">Manage PIXZOR Tokens</h2>
+    <h2 class="text-xl font-bold mb-4 text-gray-900">Manage PIXZOR Credits</h2>
     <form id="buy-tokens-form" class="mb-6">
       <label for="token-bundle" class="block mb-2 text-gray-800"
-        >Select a Token Bundle:</label
+        >Select a Credit Bundle:</label
       >
       <select
         id="token-bundle"
         class="w-full border rounded-lg p-2 mb-4 text-gray-900"
       >
-        <option value="300" data-price="3.00">300 Tokens - £3.00</option>
-        <option value="500" data-price="5.00">500 Tokens - £5.00</option>
-        <option value="1200" data-price="10.00">1,200 Tokens - £10.00</option>
+        <option value="3" data-price="3.00">3 Credits - £3.00</option>
+        <option value="5" data-price="5.00">5 Credits - £5.00</option>
+        <option value="10" data-price="10.00">10 Credits - £10.00</option>
+        <option value="20" data-price="20.00">20 Credits - £20.00</option>
+        <option value="30" data-price="30.00">30 Credits - £30.00</option>
+        <option value="50" data-price="50.00">50 Credits - £50.00</option>
+        <option value="100" data-price="100.00">100 Credits - £100.00</option>
       </select>
       <button
         type="submit"
         class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-500"
       >
-        Purchase Tokens
+        Purchase Credits
       </button>
     </form>
   </div>
 </div>
 <!-- WELCOME MODAL -->
-<div id="welcome-modal" class="modal">
+<div id="welcome-modal" class="modal hidden fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center">
   <div class="modal-backdrop"></div>
-  <div class="modal-content w-full max-w-md mx-auto bg-gray-800 text-white relative">
+  <div class="modal-content w-full max-w-md mx-auto bg-gray-800 text-white p-6 rounded-lg shadow-lg relative">
     <button
       id="close-welcome-modal"
       class="absolute top-2 right-2 text-gray-400 hover:text-gray-300 text-2xl"
@@ -54,12 +58,12 @@
     </button>
     <h2 class="text-xl font-bold mb-4">Welcome to Pixzor!</h2>
     <p class="mb-4">
-      Register now to claim your <strong>50 free tokens</strong>...
+      Register now to claim your <strong>$2.00 free credits</strong>...
     </p>
     <div class="flex justify-end space-x-4">
       <button
         id="close-welcome-modal-btn"
-        class="bg-gray-700 hover:bg-green-600 text-white px-4 py-2 rounded"
+        class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded"
       >
         Close
       </button>
@@ -73,8 +77,10 @@
   </div>
 </div>
 
+
+
 <!-- ABOUT POPUP -->
-<div id="about-popup" class="modal">
+<div id="about-popup" class="modal hidden fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center">
     <div class="modal-backdrop"></div>
     <div class="modal-content w-full max-w-md mx-auto relative" style="background: #1f2937; color: #d1d5db; padding: 24px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);">
         <button id="close-about-popup" style="position: absolute; top: 12px; right: 12px; background: none; border: none; color: #9ca3af; font-size: 1.75rem; cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#9ca3af'">×</button>
@@ -109,8 +115,12 @@
 <div id="comments-modal" class="fixed inset-0 bg-black bg-opacity-75 hidden z-40">
     <div class="container mx-auto px-4 py-8">
         <div class="bg-gray-800 rounded-lg p-6 max-w-4xl mx-auto relative">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-semibold">Purchase Credits</h2>
+                <span id="current-tokens" class="text-gray-600">0 Credits</span>
+            </div>
             <div class="flex justify-between items-start mb-4">
-                <h2 class="text-2xl font-bold">Details</h2> <!-- Changed title to be generic -->
+                <h2 class="text-2xl font-bold">Details</h2> 
                 <button id="close-comments-modal" class="text-gray-400 hover:text-white">
                     <i class="fas fa-times"></i>
                 </button>
@@ -177,3 +187,4 @@
     </div>
 </div>
 <!-- END COMMENTS/DETAILS MODAL -->
+<script src="/js/payment.js"></script>
