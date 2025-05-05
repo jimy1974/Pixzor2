@@ -1,0 +1,36 @@
+<style>
+    .error-container {
+        padding: 2rem;
+        text-align: center;
+        color: #d1d5db;
+        background: #1f2937;
+        border-radius: 8px;
+        margin: 2rem auto;
+        max-width: 600px;
+    }
+    .error-title {
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin-bottom: 1rem;
+    }
+    .error-message {
+        font-size: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    .btn-home {
+        background: #3B82F6;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        text-decoration: none;
+    }
+    .btn-home:hover {
+        background: #2563EB;
+    }
+</style>
+
+<div class="error-container">
+    <h1 class="error-title"><%= title %></h1>
+    <p class="error-message"><%= message %></p>
+    <a href="/" class="btn-home">Return to Home</a>
+</div>

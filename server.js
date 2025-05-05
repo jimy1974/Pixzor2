@@ -312,7 +312,7 @@ app.delete('/api/library/chats/:chatId', async (req, res) => {
         console.log('[DB Sync] NODE_ENV:', process.env.NODE_ENV);
         // Sync database
         console.log('[DB Sync] NODE_ENV:', process.env.NODE_ENV);
-        await sequelize.sync({ alter: true }); // Use alter: true to modify tables without dropping them
+        await sequelize.sync({ alter: false }); // Use alter: true to modify tables without dropping them
         console.log('[DB Sync] Database synced successfully with alter option.');
         // Import Cleanup Service
         const { startCleanupSchedule } = require('./utils/cleanupService');

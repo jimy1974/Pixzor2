@@ -53,8 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- Share Link Function ---
 function updateShareLinks(contentId) {
     const baseUrl = window.location.origin;
-    // Point share URL to gallery page with a query param to potentially auto-open modal (optional)
-    const shareUrl = `${baseUrl}/gallery?content=${contentId}`;
+    const shareUrl = `${baseUrl}/image/${contentId}`; // Changed to /image/:id
     const shareText = 'Check out this cool AI content from Pixzor!';
     const modalImageElement = document.getElementById('modal-image');
     const imageUrl = modalImageElement ? modalImageElement.src : '';
@@ -65,9 +64,8 @@ function updateShareLinks(contentId) {
 
     if (fb) fb.href = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
     if (tw) tw.href = `https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`;
-    // Pinterest requires an image URL for the 'media' parameter
     if (pin && imageUrl) pin.href = `https://pinterest.com/pin/create/button/?url=${encodeURIComponent(shareUrl)}&media=${encodeURIComponent(imageUrl)}&description=${encodeURIComponent(shareText)}`;
-    else if (pin) pin.href = '#'; // Disable if no image URL
+    else if (pin) pin.href = '#';
 }
 
 // --- Load Comments Function ---
@@ -147,12 +145,18 @@ async function postComment(contentId) {
 }
 
 // --- Comments Modal Function (Handles opening, details fetching, and listener setup) ---
+// --- Comments Modal Function ---
 function openCommentsModal(contentId, imageUrl) {
     console.log(`[gallery.js] openCommentsModal called. ID: ${contentId}`);
     currentContentId = contentId;
     const modal = document.getElementById('comments-modal');
     
-    // Get all required elements within this specific modal instance
+    if (!modal) {
+        console.error('[gallery.js] Comments modal not found');
+        showToast('Could not open image details.', 'error');
+        return;
+    }
+
     const elements = {
         modalImage: modal.querySelector('#modal-image'),
         modalPrompt: modal.querySelector('#modal-prompt'),
@@ -169,21 +173,21 @@ function openCommentsModal(contentId, imageUrl) {
         shareBtn: modal.querySelector('#share-button-modal'),
         closeCommentsBtn: modal.querySelector('#close-comments-modal'),
         copyPromptButton: modal.querySelector('#copy-prompt'),
-        fullscreenIconButton: modal.querySelector('#fullscreen-icon') // Icon inside the modal
+        fullscreenIconButton: modal.querySelector('#fullscreen-icon')
     };
 
-    // Validate all elements were found
     for (const key in elements) {
         if (!elements[key]) {
-            // Construct a likely ID for the error message
             const likelyId = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-            console.error(`[gallery.js] Comments modal element not found: #${likelyId} (or similar)`);
+            console.error(`[gallery.js] Comments modal element not found: #${likelyId}`);
             showToast("Error opening image details.", "error");
             return;
         }
     }
 
-    // --- Reset modal state --- 
+    history.pushState({ contentId, section: 'gallery', modal: true }, '', `/image/${contentId}`);
+    document.title = elements.modalPrompt.textContent?.substring(0, 50) + '... | Pixzor' || 'Image Details | Pixzor';
+
     elements.commentsList.innerHTML = '<li>Loading comments...</li>';
     elements.commentInput.value = '';
     elements.deleteBtnContainer.classList.add('hidden');
@@ -194,16 +198,9 @@ function openCommentsModal(contentId, imageUrl) {
     elements.modalModelElement.textContent = '';
     elements.modalImage.src = imageUrl || ''; 
     
-    // Point download button to the proxy route
-    if (elements.downloadButton) {
-        elements.downloadButton.href = `/api/download-image/${contentId}`; 
-        // Keep the download attribute as a fallback/suggestion, though Content-Disposition should take precedence
-        elements.downloadButton.download = `pixzor_content_${contentId}.jpg`; 
-    } else {
-        console.error('[gallery.js] Download button element not found in modal.');
-    }
+    elements.downloadButton.href = `/api/download-image/${contentId}`; 
+    elements.downloadButton.download = `pixzor_content_${contentId}.jpg`;
 
-    // Enable/disable comment input based on login status
     if (window.isLoggedIn) {
         elements.commentInput.disabled = false;
         elements.postCommentButton.disabled = false;
@@ -213,12 +210,12 @@ function openCommentsModal(contentId, imageUrl) {
         elements.postCommentButton.disabled = true;
         elements.commentInput.placeholder = "Login to comment";
     }
-    // --- End Reset modal state ---
 
-    // --- Attach Listeners Specific to this Modal Instance ---
     elements.closeCommentsBtn.onclick = () => {
+        console.log('[gallery.js] Close button clicked');
         modal.classList.add('hidden');
         currentContentId = null;
+        history.back();
     };
 
     elements.copyPromptButton.onclick = () => {
@@ -231,7 +228,7 @@ function openCommentsModal(contentId, imageUrl) {
                     showToast('Failed to copy prompt.', 'error');
                 });
         } else {
-             showToast('No prompt to copy.', 'info');
+            showToast('No prompt to copy.', 'info');
         }
     };
 
@@ -243,11 +240,9 @@ function openCommentsModal(contentId, imageUrl) {
     };
 
     elements.postCommentButton.onclick = () => {
-        // If the button is disabled (because user is not logged in), show the toast
         if (elements.postCommentButton.disabled) {
-             showToast("Please Login to comment", "info");
+            showToast("Please Login to comment", "info");
         } else if (currentContentId) {
-             // Otherwise (if enabled and logged in), proceed with posting
             postComment(currentContentId);
         }
     };
@@ -270,6 +265,7 @@ function openCommentsModal(contentId, imageUrl) {
                         console.log('[gallery.js] Re-laying out Masonry after delete.');
                         window.masonryInstance.layout(); 
                     } 
+                    history.back();
                 } else {
                     throw new Error(result.error || 'Failed to delete image.');
                 }
@@ -291,9 +287,7 @@ function openCommentsModal(contentId, imageUrl) {
                 showToast('Could not copy link.', 'error');
             });
     };
-    // --- End Attach Listeners ---
 
-    // --- Fetch content details --- 
     fetch(`/api/content-details/${contentId}`)
         .then(response => response.ok ? response.json() : Promise.reject('Failed to load details'))
         .then(data => {
@@ -310,13 +304,14 @@ function openCommentsModal(contentId, imageUrl) {
                 elements.shareBtnContainer.classList.remove('hidden');
             }
             loadComments(contentId);
-            modal.classList.remove('hidden'); // Show modal AFTER details start loading
+            modal.classList.remove('hidden');
+            updateShareLinks(contentId);
         })
         .catch(error => {
             console.error("Error fetching content details:", error);
             showToast('Could not load content details.', 'error');
             elements.commentsList.innerHTML = '<li>Error loading comments.</li>';
-            modal.classList.remove('hidden');
+            modal.classList.add('hidden');
             elements.modalPrompt.textContent = 'Error loading details.';
             elements.modalUsername.textContent = 'Error';
         });

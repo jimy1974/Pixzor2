@@ -1,16 +1,49 @@
-<!-- views/partials/_modals.ejsfunction openFullscreenModal(imageUrl) {
-    // ... logs ...
-    const modal = document.getElementById('fullscreen-modal'); // Needs ID 'fullscreen-modal'
-    const img = document.getElementById('fullscreen-image'); // Needs ID 'fullscreen-image'
-    // ... logs ...
-    if (modal && img) {
-        img.src = imageUrl;
-        modal.classList.remove('hidden');
-        // ... log ...
-    } else {
-        console.error('[gallery.js] openFullscreenModal: Could not find modal or img element!');
+<style>
+    /* Modal Base Styles */
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 120;
+        display: none !important; /* Ensure hidden by default */
+        justify-content: center;
+        align-items: center;
     }
-} -->
+    .modal:not(.hidden) {
+        display: flex !important; /* Only show when hidden class is removed */
+    }
+    .modal.hidden {
+        display: none !important; /* Reinforce hidden state */
+        visibility: hidden; /* Prevent flash */
+    }
+    .modal-backdrop {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+    }
+    .modal-content {
+        position: relative;
+        z-index: 121;
+        background: #1f2937; /* Dark background to match theme */
+        color: #d1d5db; /* Match text color */
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+        transition: none; /* Prevent animation flash */
+    }
+    #welcome-modal .modal-content,
+    #about-popup .modal-content {
+        background: #1f2937 !important; /* Ensure consistency */
+        padding: 24px;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    }
+</style>
 
 <!-- BUY TOKENS MODAL -->
 <div id="buy-tokens-modal" class="modal hidden fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center">
@@ -18,16 +51,14 @@
   <div class="modal-content w-full max-w-md mx-auto relative">
     <button
       id="close-buy-tokens-modal"
-      class="absolute top-2 right-2 text-gray-800 hover:text-gray-900"
-    >&times;</button>
-    <h2 class="text-xl font-bold mb-4 text-gray-900">Manage PIXZOR Credits</h2>
+      class="absolute top-2 right-2 text-gray-400 hover:text-gray-300 text-2xl"
+    >×</button>
+    <h2 class="text-xl font-bold mb-4">Manage PIXZOR Credits</h2>
     <form id="buy-tokens-form" class="mb-6">
-      <label for="token-bundle" class="block mb-2 text-gray-800"
-        >Select a Credit Bundle:</label
-      >
+      <label for="token-bundle" class="block mb-2">Select a Credit Bundle:</label>
       <select
         id="token-bundle"
-        class="w-full border rounded-lg p-2 mb-4 text-gray-900"
+        class="w-full border rounded-lg p-2 mb-4 bg-gray-700 text-gray-200"
       >
         <option value="3" data-price="3.00">3 Credits - £3.00</option>
         <option value="5" data-price="5.00">5 Credits - £5.00</option>
@@ -46,15 +77,16 @@
     </form>
   </div>
 </div>
+
 <!-- WELCOME MODAL -->
 <div id="welcome-modal" class="modal hidden fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center">
   <div class="modal-backdrop"></div>
-  <div class="modal-content w-full max-w-md mx-auto bg-gray-800 text-white p-6 rounded-lg shadow-lg relative">
+  <div class="modal-content w-full max-w-md mx-auto p-6 rounded-lg shadow-lg relative">
     <button
       id="close-welcome-modal"
       class="absolute top-2 right-2 text-gray-400 hover:text-gray-300 text-2xl"
     >
-      &times;
+      ×
     </button>
     <h2 class="text-xl font-bold mb-4">Welcome to Pixzor!</h2>
     <p class="mb-4">
@@ -77,66 +109,72 @@
   </div>
 </div>
 
-
-
 <!-- ABOUT POPUP -->
 <div id="about-popup" class="modal hidden fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center">
     <div class="modal-backdrop"></div>
-    <div class="modal-content w-full max-w-md mx-auto relative" style="background: #1f2937; color: #d1d5db; padding: 24px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);">
-        <button id="close-about-popup" style="position: absolute; top: 12px; right: 12px; background: none; border: none; color: #9ca3af; font-size: 1.75rem; cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#9ca3af'">×</button>
-        <h2 style="color: #fff; font-size: 1.5rem; margin-bottom: 16px;">About Pixzor</h2>
-        <p style="color: #d1d5db; line-height: 1.5; margin-bottom: 16px;">Pixzor is an AI-powered platform designed to bring your creative ideas to life with cutting-edge tools.</p>
-        <footer style="background: #111827; padding: 16px; border-radius: 0 0 12px 12px; margin: 0 -24px -24px;">
-            <p style="color: #d1d5db; line-height: 1.5; margin-bottom: 0;">
+    <div class="modal-content w-full max-w-md mx-auto relative p-6 rounded-lg">
+        <button id="close-about-popup" class="absolute top-2 right-2 text-gray-400 hover:text-gray-300 text-2xl">×</button>
+        <h2 class="text-xl font-bold mb-4">About Pixzor</h2>
+        <p class="line-height-1.5 mb-4">Pixzor is an AI-powered platform designed to bring your creative ideas to life with cutting-edge tools.</p>
+        <p class="line-height-1.5 mb-4"> 
+            For inquiries:
+            <a href="mailto:contact@pixzor.com" class="text-blue-400 hover:text-blue-300">contact@pixzor.com</a>
+        </p>
+        <footer class="bg-gray-900 p-4 rounded-b-lg -mx-6 -mb-6">
+            <p class="line-height-1.5 mb-0">
                 By using Pixzor, you agree to our
                 <a id="terms-link" href="#" class="text-blue-400 hover:text-blue-300">Terms of Service</a>.
             </p>
         </footer>
-        <p style="color: #d1d5db; line-height: 1.5; margin: 16px 0;"> 
-            For inquiries:
-            <a href="mailto:contact@pixzor.com" class="text-blue-400 hover:text-blue-300">contact@pixzor.com</a>
-        </p>
-        <button id="close-about-popup-btn" style="background: #dc2626; color: #fff; padding: 8px 16px; border-radius: 6px; transition: background 0.2s; display: block; margin: 0 auto;" onmouseover="this.style.background='#ef4444'" onmouseout="this.style.background='#dc2626'">Close</button>
+        <button id="close-about-popup-btn" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded block mx-auto mt-4">Close</button>
     </div>
 </div>
 
 <!-- FULLSCREEN IMAGE MODAL -->
-<div id="fullscreen-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 hidden" onclick="closeFullscreenModal()">
+<div id="fullscreen-modal" class="modal hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90">
   <button
     class="absolute top-4 right-6 text-white text-4xl font-bold hover:text-gray-300 z-[51]"
-    onclick="event.stopPropagation(); closeFullscreenModal();"
-  >&times;</button>
-  <div class="relative max-w-full max-h-full p-4" onclick="event.stopPropagation();">
+    onclick="closeFullscreenModal();"
+  >×</button>
+  <div class="relative max-w-full max-h-full p-4">
     <img id="fullscreen-image" src="" alt="Fullscreen Image" class="block max-w-full max-h-[90vh] object-contain">
   </div>
 </div>
 
-<!-- COMMENTS/DETAILS MODAL (Moved from gallery.ejs) -->
-<div id="comments-modal" class="fixed inset-0 bg-black bg-opacity-75 hidden z-40">
+<!-- COMMENTS/DETAILS MODAL -->
+<!-- COMMENTS/DETAILS MODAL -->
+<div id="comments-modal" class="modal hidden fixed inset-0 bg-black bg-opacity-75 z-40">
     <div class="container mx-auto px-4 py-8">
-        <div class="bg-gray-800 rounded-lg p-6 max-w-4xl mx-auto relative">
-            <div class="flex justify-between items-center">
-                <h2 class="text-xl font-semibold">Purchase Credits</h2>
-                <span id="current-tokens" class="text-gray-600">0 Credits</span>
-            </div>
-            <div class="flex justify-between items-start mb-4">
+        <div class="modal-content max-w-4xl mx-auto relative p-6 rounded-lg">
+            <div class="flex justify-between items-center mb-4">
                 <h2 class="text-2xl font-bold">Details</h2> 
-                <button id="close-comments-modal" class="text-gray-400 hover:text-white">
-                    <i class="fas fa-times"></i>
+                <button id="close-comments-modal" class="text-gray-400 hover:text-white text-2xl">
+                    ×
                 </button>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <div class="relative">
-                         <img id="modal-image" src="" alt="Modal Image" class="w-full rounded-lg">
-                         <button id="fullscreen-icon" class="absolute top-2 left-2 bg-black bg-opacity-50 text-white p-1 rounded-full text-xs hover:bg-opacity-75 z-10" title="View Fullscreen">
+                        <img id="modal-image" src="" alt="Modal Image" class="w-full rounded-lg">
+                        <button id="fullscreen-icon" class="absolute top-2 left-2 bg-black bg-opacity-50 text-white p-1 rounded-full text-xs hover:bg-opacity-75 z-10" title="View Fullscreen">
                             <i class="fas fa-expand"></i>
-                         </button>
+                        </button>
                     </div>
                     <div class="mt-4">
-                        <a id="download-button" href="#" download class="btn btn-primary w-full">
+                        <a id="download-button" href="#" download class="bg-green-600 text-white px-4 py-2 rounded w-full inline-block text-center">
                             <i class="fas fa-download mr-2"></i>Download
                         </a>
+                        <div class="share-buttons flex gap-2 mt-2">
+                            <a id="share-facebook" href="#" target="_blank" class="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-500" title="Share on Facebook">
+                                <i class="fab fa-facebook-f"></i>
+                            </a>
+                            <a id="share-twitter" href="#" target="_blank" class="bg-blue-400 text-white p-2 rounded-full hover:bg-blue-300" title="Share on Twitter">
+                                <i class="fab fa-twitter"></i>
+                            </a>
+                            <a id="share-pinterest" href="#" target="_blank" class="bg-red-600 text-white p-2 rounded-full hover:bg-red-500" title="Share on Pinterest">
+                                <i class="fab fa-pinterest-p"></i>
+                            </a>
+                        </div>
                     </div>
                 </div>
                 <div>
@@ -147,24 +185,24 @@
                                 <i class="fas fa-copy"></i>
                             </button>
                         </h3>
-                        <p id="modal-prompt" class="text-gray-300 bg-gray-700 p-2 rounded max-h-20 overflow-y-auto"></p>
+                        <p id="modal-prompt" class="bg-gray-700 p-2 rounded max-h-20 overflow-y-auto"></p>
                     </div>
                     <div class="mb-4">
                         <h3 class="font-bold">Created by:</h3>
-                        <p id="modal-username" class="text-gray-300"></p>
+                        <p id="modal-username"></p>
                     </div>
                     <div id="model-container" class="mb-4 hidden">
                         <h3 class="font-bold">Model:</h3>
-                        <p id="modal-model" class="text-gray-300"></p>
+                        <p id="modal-model"></p>
                     </div>
                     <div class="flex space-x-2 mb-4">
                         <div id="delete-button-container" class="flex-1 hidden">
-                            <button id="delete-button-modal" class="btn btn-danger w-full">
+                            <button id="delete-button-modal" class="bg-red-600 text-white px-4 py-2 rounded w-full">
                                 <i class="fas fa-trash mr-2"></i>Delete
                             </button>
                         </div>
                         <div id="share-button-container" class="flex-1 hidden">
-                            <button id="share-button-modal" class="btn btn-secondary w-full">
+                            <button id="share-button-modal" class="bg-gray-600 text-white px-4 py-2 rounded w-full">
                                 <i class="fas fa-share-alt mr-2"></i>Share
                             </button>
                         </div>
@@ -175,9 +213,9 @@
                     </div>
                     <div class="flex space-x-2">
                         <input type="text" id="comment-input" placeholder="Login to comment..." 
-                               class="flex-1 bg-gray-700 rounded px-4 py-2" disabled>
+                               class="flex-1 bg-gray-700 rounded px-4 py-2 text-gray-200" disabled>
                         <button id="post-comment" 
-                                class="btn btn-primary disabled:opacity-50" disabled>
+                                class="bg-green-600 text-white px-4 py-2 rounded disabled:opacity-50" disabled>
                             Post
                         </button>
                     </div>
@@ -186,5 +224,4 @@
         </div>
     </div>
 </div>
-<!-- END COMMENTS/DETAILS MODAL -->
 <script src="/js/payment.js"></script>

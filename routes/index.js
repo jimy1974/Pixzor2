@@ -121,49 +121,85 @@ router.get('/', (req, res) => {
 });
 
 router.get('/image/:id', async (req, res) => {
-    try {
-        const contentId = req.params.id;
-        const userId = req.user ? req.user.id : null;
+  try {
+    const contentId = req.params.id;
+    const userId = req.user ? req.user.id : null;
+    console.log(`[Image Route] Fetching image ID: ${contentId}, User ID: ${userId}, Headers:`, req.headers);
 
-        const item = await GeneratedContent.findOne({
-            where: { 
-                id: contentId,
-                [Op.or]: [
-                    { isPublic: true },
-                    { userId: userId }
-                ]
-            },
-            include: [
-                { model: User, as: 'user', attributes: ['id', 'username', 'photo'] },
-                { 
-                    model: ImageComment, 
-                    as: 'comments', 
-                    include: [{ model: User, as: 'user', attributes: ['id', 'username', 'photo'] }],
-                    order: [['createdAt', 'ASC']]
-                } 
-            ]
-        });
+    const item = await GeneratedContent.findOne({
+      where: {
+        id: contentId,
+        [Op.or]: [
+          { isPublic: true },
+          { userId: userId },
+        ],
+      },
+      include: [
+        { model: User, as: 'user', attributes: ['id', 'username', 'photo'] },
+        {
+          model: ImageComment,
+          as: 'comments',
+          include: [{ model: User, as: 'user', attributes: ['id', 'username', 'photo'] }],
+          order: [['createdAt', 'ASC']],
+        },
+      ],
+    });
 
-        if (!item) {
-            console.log(`[Image Detail Page] Content not found or access denied for ID: ${contentId}, User: ${userId}`);
-            return res.status(404).send('Content not found or access denied.'); 
-        }
-        
-        console.log(`[Image Detail Page] Rendering page for content ID: ${contentId}`);
-
-        res.render('image-detail', { 
-            title: `Image: ${item.prompt ? item.prompt.substring(0, 30) : 'Details'}...`, 
-            item: item, 
-            user: req.user, 
-            contentId: item.id,
-            includeChat: true,
-            requestPath: req.path
-        });
-
-    } catch (error) {
-        console.error(`Error rendering image detail page for ID ${req.params.id}:`, error);
-        res.status(500).send('Error loading image details.'); 
+    console.log(`[Image Route] Query result for ID: ${contentId}, Found: ${!!item}, isPublic: ${item?.isPublic}, item.userId: ${item?.userId}`);
+    if (!item) {
+      console.log(`[Image Route] Content not found or access denied for ID: ${contentId}, User: ${userId}`);
+      const message = userId ? 'The requested image could not be found or you do not have access.' : 'Please log in to view this image.';
+      return res.status(404).render('error', {
+        layout: 'layouts/layout',
+        title: 'Image Not Found',
+        message,
+        user: req.user || null,
+        includeChat: false,
+      });
     }
+
+    const renderData = {
+      title: item.prompt
+        ? `${item.prompt.substring(0, 50)}... | Pixzor`
+        : 'Image Details | Pixzor',
+      description: item.prompt
+        ? `View this AI-generated image: ${item.prompt.substring(0, 100)}...`
+        : 'View this AI-generated image on Pixzor.',
+      imageUrl: item.contentUrl,
+      url: `https://www.pixzor.com/image/${contentId}`,
+      item: {
+        ...item.toJSON(),
+        comments: item.comments.map(c => ({
+          commentText: c.commentText || c.text,
+          user: c.user,
+          createdAt: c.createdAt
+        }))
+      },
+      user: req.user || null,
+      isLoggedIn: req.isAuthenticated ? req.isAuthenticated() : false,
+      csrfToken: req.csrfToken ? req.csrfToken() : '',
+      contentId: item.id,
+      includeChat: false,
+      requestPath: req.path,
+      layout: 'layouts/layout'
+    };
+
+    console.log(`[Image Route] Rendering image-detail for ID: ${contentId}, Data:`, {
+      title: renderData.title,
+      imageUrl: renderData.imageUrl,
+      contentId: renderData.contentId
+    });
+    res.render('image-detail', renderData);
+  } catch (error) {
+    console.error(`[Image Route] Error rendering image detail page for ID ${req.params.id}:`, error.stack);
+    res.status(500).render('error', {
+      layout: 'layouts/layout',
+      title: 'Server Error',
+      message: `An error occurred while loading the image details: ${error.message}`,
+      user: req.user || null,
+      includeChat: false,
+    });
+  }
 });
 
 router.get('/partials/modals', (req, res) => {
