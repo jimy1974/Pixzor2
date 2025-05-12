@@ -327,31 +327,7 @@ textarea#image-input {
 .image-card:hover img {
     transform: scale(1.02);
 }
-.like-button {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    background: rgba(0, 0, 0, 0.5);
-    border: none;
-    border-radius: 50%;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-.like-button:hover {
-    background: rgba(0, 0, 0, 0.7);
-}
-.like-button i {
-    color: white;
-    font-size: 1.2rem;
-}
-.like-button i.liked {
-    color: #ef4444;
-}
+
 @media (max-width: 1024px) {
     .grid-sizer,
     .image-card {
@@ -460,4 +436,40 @@ textarea#image-input {
         max-width: 80px;
         height: auto;
     }
+}
+
+
+
+
+/* Styles for the new like button appearance */
+.like-container {
+    /* Ensures it doesn't interfere with absolute positioning of children if any other styles were added. */
+    /* Tailwind classes in JS (top-2 right-2 flex flex-col items-center) handle positioning and layout. */
+}
+
+.like-btn {
+    background: none !important; /* Ensure no background from other rules */
+    border: none !important; /* Ensure no border */
+    cursor: pointer;
+    outline: none;
+    padding: 0; /* Remove padding if icon size is controlled by font-size */
+    line-height: 1; /* May help align icon if it has extra space */
+}
+
+.like-btn:disabled {
+    cursor: not-allowed;
+    /* Tailwind opacity-50 can be used directly in JS if needed, or a class here */
+}
+
+/* The color of the heart icon is now primarily controlled by Tailwind classes
+   (e.g., text-gray-700 or text-red-500) set in the JavaScript.
+   The hover:text-red-500 class in JS handles hover.
+   The font-size for the icon (text-2xl) is also set in JS.
+*/
+
+.like-count {
+    /* Tailwind classes in JS (text-xs text-gray-200) handle basic styling. */
+    /* Add any additional specific styling for the count if needed below */
+    margin-top: -2px; /* Adjust slightly to bring closer to heart, if needed */
+    font-weight: 500;
 }

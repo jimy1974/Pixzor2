@@ -8,11 +8,14 @@
     <p class="text-lg text-gray-300">Create consistent characters, stylize images or make movies.</p>
 </div>
 
+<!-- Content area for dynamic partials -->
+<div id="content-area" class="container mx-auto p-4">
+    <%- include('partials/home_content') %>
+</div>
+
 <script>
     // Make backend data available to frontend scripts
     // Use <%- %> for unescaped JSON output
     window.RUNWARE_MODELS = <%- JSON.stringify(runwareModels || {}) %>;
     window.PROMPT_BASED_STYLES = <%- JSON.stringify(promptBasedStyles || []) %>;
-    // Placeholder if we need the original full style list later
-    // window.ORIGINAL_STYLES = []; // Example: Assign empty array if needed later
 </script>

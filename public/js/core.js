@@ -1,8 +1,5 @@
-
-
 document.addEventListener('DOMContentLoaded', () => {
-    
-    // Add popstate handler (replace existing if present)
+    // Add popstate handler (unchanged)
     window.addEventListener('popstate', (event) => {
         console.log('[Popstate] Handling popstate event:', event.state, 'URL:', window.location.pathname);
 
@@ -14,7 +11,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Handle section navigation
         const path = window.location.pathname;
         const contentArea = document.getElementById('chat-messages') || document.getElementById('content-area');
         if (!contentArea) {
@@ -55,18 +51,16 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (path.match(/^\/image\/\d+$/)) {
             console.log('[Popstate] Image route detected, checking modal state');
             if (!event.state || !event.state.modal) {
-                // Direct access to /image/:id, reload page
                 console.log('[Popstate] Reloading for direct image access');
                 window.location.reload();
             }
         }
     });
-    
+
     console.log('[core.js] Page loaded, checking modals...');
     const modals = document.querySelectorAll('.modal');
     modals.forEach(modal => {
         console.log(`[core.js] Modal ${modal.id}: display=${getComputedStyle(modal).display}, hidden=${modal.classList.contains('hidden')}`);
-        // Watch for changes to hidden class
         const observer = new MutationObserver(mutations => {
             mutations.forEach(mutation => {
                 if (mutation.attributeName === 'class') {
@@ -78,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// Log any modal display changes
+// Log any modal display changes (unchanged)
 window.addEventListener('load', () => {
     console.log('[core.js] Window loaded, final modal states:');
     document.querySelectorAll('.modal').forEach(modal => {
@@ -86,8 +80,7 @@ window.addEventListener('load', () => {
     });
 });
 
-
-// public/js/core.js
+// WebSocket (unchanged)
 const protocol = window.location.protocol === 'http:' ? 'ws://' : 'wss://';
 const ws = new WebSocket(`${protocol}${window.location.host}`);
 
@@ -95,10 +88,6 @@ ws.onopen = () => console.log('WebSocket connected');
 ws.onerror = (error) => console.error('WebSocket error:', error);
 ws.onclose = (event) => console.log('WebSocket disconnected:', event.code, event.reason);
 
-/**
- * Sends a pre-formatted message object over the WebSocket.
- * @param {object} messageObject The object to send (e.g., { type: 'chat', message: 'text', chatSessionId: '...' }).
- */
 function sendChatMsg(messageObject) {
     if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(messageObject));
@@ -200,7 +189,7 @@ function showToast(message, type = 'info') {
     setTimeout(() => toast.remove(), 5000);
 }
 
-// User Authentication
+// User Authentication (unchanged)
 window.isLoggedIn = false;
 
 fetch('/api/user-info')
@@ -234,32 +223,64 @@ fetch('/api/user-info')
         window.isLoggedIn = false;
     });
 
-// Sidebar Logic
+// Sidebar Logic (MODIFIED)
 const sidebarItems = document.querySelectorAll('.sidebar-item');
-const contentArea = document.getElementById('chat-messages');
+const contentArea = document.getElementById('content-area') || document.getElementById('chat-messages');
+
+if (!contentArea) {
+    console.error('[Sidebar] Content area not found');
+}
 
 sidebarItems.forEach(item => {
-    item.addEventListener('click', () => {
+    item.addEventListener('click', (event) => {
+        event.preventDefault();
         const section = item.dataset.section;
         console.log(`[Sidebar] Clicked on section: ${section}`);
+        console.log(`[Sidebar Click] Detected section: '${section}'`);
+
+        // Remove active class from all items and add to the clicked one
+        sidebarItems.forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+
+        // Update history and title (MODIFIED)
+        if (section === 'files') {
+            history.pushState({ section }, '', '/files');
+            document.title = 'Files | Pixzor';
+        } else {
+            history.replaceState({ section }, '', window.location.pathname);
+            document.title = `${section.charAt(0).toUpperCase() + section.slice(1)} | Pixzor`;
+        }
+
+        if (!contentArea) {
+            console.error('[Sidebar Click] Content area not found');
+            return;
+        }
+
+        // Reset chat area flag
+        window.isChatAreaClearedForSession = false;
+
+        // Load section content (unchanged)
         if (section === 'home') {
             window.location.href = '/';
             return;
-        }
-        console.log(`[Sidebar Click] Detected section: '${section}'`);
-        window.isChatAreaClearedForSession = false;
-        sidebarItems.forEach(i => i.classList.remove('active'));
-        item.classList.add('active');
-        contentArea.innerHTML = '<p>Loading...</p>';
-
-        // Existing Files section (unchanged)
-        if (section === 'files') {
+        } else if (section === 'files') {
             contentArea.innerHTML = '<p class="text-center text-gray-400 p-4">Loading files...</p>';
 
-            fetch('/api/files')
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+            console.log(`[Files Load] CSRF Token: ${csrfToken}, isLoggedIn: ${window.isLoggedIn}`);
+
+            fetch('/api/files', {
+                method: 'GET',
+                headers: {
+                    'X-CSRF-Token': csrfToken,
+                    'Accept': 'application/json'
+                },
+                credentials: 'include'
+            })
                 .then(response => {
                     console.log(`[Files Load] Response status: ${response.status}`);
                     if (!response.ok) {
+                        console.log(`[Files Load] Response headers:`, response.headers);
                         if (response.status === 401) {
                             console.log('[Files Load] Detected 401 Unauthorized');
                             return Promise.reject({ isAuthError: true, status: response.status });
@@ -281,7 +302,14 @@ sidebarItems.forEach(item => {
                                      alt="File thumbnail" 
                                      class="w-full h-full object-cover rounded-lg transition-transform duration-200 ease-in-out group-hover:scale-105"
                                      loading="lazy">
-                                <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity duration-200 ease-in-out rounded-lg"></div>      
+                                <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity duration-200 ease-in-out rounded-lg"></div>
+                                ${window.isLoggedIn && item.isOwner ? `
+                                    <button class="toggle-public-btn absolute top-2 left-2 bg-gray-800 text-white p-2 rounded-full hover:bg-gray-700"
+                                            data-id="${item.id}" data-public="${item.isPublic ? '1' : '0'}"
+                                            title="${item.isPublic ? 'Make Private' : 'Make Public'}">
+                                        <i class="fas ${item.isPublic ? 'fa-lock' : 'fa-globe'}"></i>
+                                    </button>
+                                ` : ''}
                             </div>
                         `).join('');
                         html = `<div id="file-list" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 p-4">
@@ -291,8 +319,43 @@ sidebarItems.forEach(item => {
                         html = `<p class="text-center text-gray-400 p-4">${data.message || 'No files yet.'}</p>`;
                     }
                     contentArea.innerHTML = html;
+
                     contentArea.addEventListener('click', (event) => {
                         const fileCard = event.target.closest('.file-card');
+                        const toggleBtn = event.target.closest('.toggle-public-btn');
+
+                        if (toggleBtn) {
+                            const contentId = toggleBtn.dataset.id;
+                            const isPublic = toggleBtn.dataset.public === '1';
+                            console.log(`[Files Click] Toggling public status for ID: ${contentId}, Current isPublic: ${isPublic}`);
+
+                            fetch(`/api/content/${contentId}`, {
+                                method: 'PATCH',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-Token': csrfToken
+                                },
+                                credentials: 'include',
+                                body: JSON.stringify({ isPublic: !isPublic })
+                            })
+                                .then(response => response.json())
+                                .then(result => {
+                                    if (result.success) {
+                                        toggleBtn.dataset.public = isPublic ? '0' : '1';
+                                        toggleBtn.title = isPublic ? 'Make Public' : 'Make Private';
+                                        toggleBtn.querySelector('i').className = `fas ${isPublic ? 'fa-globe' : 'fa-lock'}`;
+                                        showToast(`Image is now ${isPublic ? 'private' : 'public'}.`, 'success');
+                                    } else {
+                                        throw new Error(result.error || 'Failed to update visibility');
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('[Files Toggle] Error:', error);
+                                    showToast(`Failed to update visibility: ${error.message}`, 'error');
+                                });
+                            return;
+                        }
+
                         if (fileCard) {
                             const contentId = fileCard.dataset.id;
                             const imgElement = fileCard.querySelector('img');
@@ -320,27 +383,58 @@ sidebarItems.forEach(item => {
                     }
                 });
         } else if (section === 'chat-history') {
-            fetch('/api/library/chats')
+            contentArea.innerHTML = '<p class="text-center text-gray-400 p-4">Loading chat history...</p>';
+
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+            console.log(`[Chat History Load] CSRF Token: ${csrfToken}, isLoggedIn: ${window.isLoggedIn}`);
+
+            fetch('/api/library/chats', {
+                method: 'GET',
+                headers: {
+                    'X-CSRF-Token': csrfToken,
+                    'Accept': 'application/json'
+                },
+                credentials: 'include'
+            })
                 .then(response => {
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    console.log(`[Chat History Load] Response status: ${response.status}`);
+                    if (!response.ok) {
+                        if (response.status === 401) {
+                            console.log('[Chat History Load] Detected 401 Unauthorized');
+                            return Promise.reject({ isAuthError: true, status: response.status });
+                        }
+                        return response.text().then(text => {
+                            console.error('[Chat History Load] Response text:', text.slice(0, 100));
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        });
+                    }
                     return response.json();
                 })
                 .then(data => {
+                    console.log('[Chat History Load] Data received:', data);
                     const html = data.items?.map(item => `
                         <div class="content-item chat-message flex justify-between items-center p-3 rounded hover:bg-gray-700 cursor-pointer border-b border-gray-600" data-chat-id="${item.id}">
                             <div class="flex-grow mr-2 overflow-hidden" data-action="view-chat">
-                                <p class="font-semibold text-white truncate">${item.title}</p>
+                                <p class="font-semibold text-white truncate">${item.title || 'Chat Session'}</p>
                                 <p class="text-gray-400 text-sm">${new Date(item.timestamp).toLocaleString()}</p>
                             </div>
                             <button class="delete-chat-btn flex-shrink-0 p-1 text-gray-400 hover:text-red-500 rounded" data-chat-id="${item.id}" title="Delete Chat">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                 </svg>
                             </button>
                         </div>
                     `).join('') || `<p class="text-center text-gray-400">${data.message || 'No chat history yet.'}</p>`;
-                    contentArea.innerHTML = `<h2 class="text-xl font-semibold text-white mb-4 p-2 border-b border-gray-600">Chat History</h2><div class="space-y-1">${html}</div>`;
+                    contentArea.innerHTML = `
+                        <h2 class="text-xl font-semibold text-white mb-4 p-2 border-b border-gray-600">Chat History</h2>
+                        <div class="space-y-1">${html}</div>
+                    `;
+
                     function renderChatMessageContent(content) {
+                        if (!window.marked) {
+                            console.warn('[Chat History] Marked library not found, rendering plain text');
+                            return content || '';
+                        }
                         let htmlContent = marked.parse(content || '', { sanitize: true, gfm: true, breaks: true });
                         const imageUrlRegex = /(\/images\/generated\/[^\s]+\.(?:jpg|jpeg|png|gif))\b/gi;
                         htmlContent = htmlContent.replace(imageUrlRegex, (match) => {
@@ -348,18 +442,33 @@ sidebarItems.forEach(item => {
                         });
                         return htmlContent;
                     }
+
                     document.querySelectorAll('.content-item.chat-message[data-chat-id]').forEach(chat => {
-                        chat.addEventListener('click', () => {
+                        chat.addEventListener('click', (event) => {
+                            if (event.target.closest('.delete-chat-btn')) return;
                             const chatId = chat.dataset.chatId;
                             console.log(`[Chat History] Clicked on chat ID: ${chatId}`);
-                            contentArea.innerHTML = '<p class="text-center text-gray-400">Loading chat...</p>';
-                            fetch(`/api/library/chats/${chatId}`)
+                            contentArea.innerHTML = '<p class="text-center text-gray-400 p-4">Loading chat...</p>';
+
+                            fetch(`/api/library/chats/${chatId}`, {
+                                method: 'GET',
+                                headers: {
+                                    'X-CSRF-Token': csrfToken,
+                                    'Accept': 'application/json'
+                                },
+                                credentials: 'include'
+                            })
                                 .then(response => {
-                                    if (!response.ok) throw new Error(`HTTP error fetching chat ${chatId}! status: ${response.status}`);
+                                    console.log(`[Chat History] Fetch chat ID ${chatId} status: ${response.status}`);
+                                    if (!response.ok) {
+                                        return response.json().then(err => {
+                                            throw new Error(err.message || `HTTP error! status: ${response.status}`);
+                                        });
+                                    }
                                     return response.json();
                                 })
                                 .then(chatData => {
-                                    console.log("[Chat History] Received chat data:", chatData);
+                                    console.log('[Chat History] Received chat data:', chatData);
                                     const messagesHtml = chatData.messages?.map(msg => `
                                         <div class="chat-message p-3 rounded mb-2 ${msg.role === 'user' ? 'bg-gray-800 text-right' : 'bg-gray-700 text-left'}">
                                             <strong class="font-semibold">${msg.role === 'user' ? 'You' : 'Bot'}:</strong>
@@ -377,56 +486,64 @@ sidebarItems.forEach(item => {
                                     });
                                 })
                                 .catch(error => {
-                                    console.error('[Chat History] Error loading specific chat:', error);
-                                    contentArea.innerHTML = `<p class="text-center text-red-500">Error loading chat: ${error.message}</p>`;
+                                    console.error('[Chat History] Error loading chat:', error);
+                                    contentArea.innerHTML = `<p class="text-center text-red-500 p-4">Error loading chat: ${error.message}</p>`;
                                 });
                         });
                     });
+
                     document.querySelectorAll('.delete-chat-btn').forEach(button => {
                         button.addEventListener('click', (event) => {
                             event.stopPropagation();
                             const chatId = button.dataset.chatId;
                             const chatItemElement = button.closest('.content-item.chat-message');
                             const chatTitle = chatItemElement?.querySelector('p.font-semibold')?.textContent || 'this chat';
+
                             if (window.confirm(`Are you sure you want to delete "${chatTitle}"? This cannot be undone.`)) {
                                 console.log(`[Chat History] Attempting to delete chat ID: ${chatId}`);
                                 fetch(`/api/library/chats/${chatId}`, {
                                     method: 'DELETE',
                                     headers: {
-                                        'Content-Type': 'application/json'
-                                    }
+                                        'Content-Type': 'application/json',
+                                        'X-CSRF-Token': csrfToken
+                                    },
+                                    credentials: 'include'
                                 })
-                                .then(response => {
-                                    console.log(`[Chat History] Delete chat response status: ${response.status}`);
-                                    if (!response.ok) {
-                                        return response.json().then(err => {
-                                            console.error(`[Chat History] Delete chat error data:`, err);
-                                            throw new Error(err.message || `Server error: ${response.status}`);
-                                        });
-                                    }
-                                    return response.json();
-                                })
-                                .then(deleteData => {
-                                    console.log(`[Chat History] Successfully deleted chat ID: ${chatId}`, deleteData);
-                                    if (chatItemElement) {
-                                        chatItemElement.remove();
-                                    }
-                                    showToast(`Chat "${chatTitle}" deleted successfully.`, 'success');
-                                    if (contentArea.querySelectorAll('.content-item.chat-message[data-chat-id]').length === 0) {
-                                        contentArea.querySelector('div.space-y-1').innerHTML = '<p class="text-center text-gray-400">No chat history yet.</p>';
-                                    }
-                                })
-                                .catch(error => {
-                                    console.error(`[Chat History] Error deleting chat ID ${chatId}:`, error);
-                                    showToast(`Failed to delete chat: ${error.message}`, 'error');
-                                });
+                                    .then(response => {
+                                        console.log(`[Chat History] Delete chat response status: ${response.status}`);
+                                        if (!response.ok) {
+                                            return response.json().then(err => {
+                                                throw new Error(err.message || `HTTP error! status: ${response.status}`);
+                                            });
+                                        }
+                                        return response.json();
+                                    })
+                                    .then(data => {
+                                        console.log(`[Chat History] Successfully deleted chat ID: ${chatId}`, data);
+                                        if (chatItemElement) {
+                                            chatItemElement.remove();
+                                            showToast(`Chat "${chatTitle}" deleted successfully.`, 'success');
+                                            if (!contentArea.querySelector('.content-item.chat-message[data-chat-id]')) {
+                                                contentArea.querySelector('div.space-y-1').innerHTML = '<p class="text-center text-gray-400">No chat history yet.</p>';
+                                            }
+                                        }
+                                    })
+                                    .catch(error => {
+                                        console.error(`[Chat History] Error deleting chat ID ${chatId}:`, error);
+                                        showToast(`Failed to delete chat: ${error.message}`, 'error');
+                                    });
                             }
                         });
                     });
                 })
                 .catch(error => {
                     console.error('[Chat History] Error loading chat history:', error);
-                    contentArea.innerHTML = `<p class="text-center text-red-500">Error loading chat history: ${error.message}</p>`;
+                    contentArea.classList.remove('loading');
+                    if (error && error.isAuthError) {
+                        contentArea.innerHTML = '<p class="text-center text-gray-400 p-4">Please log in to access your chat history.</p>';
+                    } else {
+                        contentArea.innerHTML = `<p class="text-center text-red-500 p-4">Error loading chat history: ${error.message || 'An unknown error occurred'}</p>`;
+                    }
                 });
         } else if (section === 'chat') {
             fetch('/partials/chat-tab')
@@ -453,6 +570,7 @@ sidebarItems.forEach(item => {
                 });
         } else if (section === 'gallery') {
             console.log('[core.js] Fetching gallery partial.');
+            contentArea.innerHTML = '<p class="text-center text-gray-400 p-4">Loading gallery...</p>';
             fetch('/partials/gallery')
                 .then(response => {
                     if (!response.ok) {
@@ -461,25 +579,19 @@ sidebarItems.forEach(item => {
                     return response.text();
                 })
                 .then(html => {
-                    if (contentArea) {
-                        contentArea.innerHTML = html;
-                        console.log('[core.js] Gallery partial HTML injected.');
-                        if (typeof initializeGallery === 'function') {
-                            console.log('[core.js] Calling initializeGallery().');
-                            initializeGallery();
-                        } else {
-                            console.error('[core.js] initializeGallery function not found after loading partial. Check if gallery.js is loaded.');
-                            contentArea.innerHTML = '<p class="text-red-500 p-4">Error: Gallery script not found.</p>';
-                        }
+                    contentArea.innerHTML = html;
+                    console.log('[core.js] Gallery partial HTML injected.');
+                    if (typeof initializeGallery === 'function') {
+                        console.log('[core.js] Calling initializeGallery().');
+                        initializeGallery();
                     } else {
-                        console.error('[core.js] contentArea element not found.');
+                        console.error('[core.js] initializeGallery function not found after loading partial.');
+                        contentArea.innerHTML = '<p class="text-center text-red-500 p-4">Error loading gallery: Gallery script not found.</p>';
                     }
                 })
                 .catch(error => {
-                    console.error('Error loading gallery partial:', error);
-                    if (contentArea) {
-                        contentArea.innerHTML = `<p>Error loading gallery: ${error.message}</p>`;
-                    }
+                    console.error('[core.js] Error loading gallery partial:', error);
+                    contentArea.innerHTML = `<p class="text-center text-red-500 p-4">Error loading gallery: ${error.message}</p>`;
                 });
         } else if (section === 'create-image') {
             fetch('/partials/create-images')
@@ -528,6 +640,8 @@ sidebarItems.forEach(item => {
                     console.error("Error loading create-images partial:", error);
                     contentArea.innerHTML = `<p>Error loading image creation UI: ${error.message}</p>`;
                 });
+        } else {
+            contentArea.innerHTML = `<p class="text-center text-gray-400 p-4">Section ${section} not implemented.</p>`;
         }
     });
 });

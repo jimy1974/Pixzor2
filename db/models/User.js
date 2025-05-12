@@ -1,7 +1,7 @@
 // db\models\User.js
-const { DataTypes } = require('sequelize');
+// const { DataTypes } = require('sequelize'); // Removed this line
 
-module.exports = (sequelize, DataTypes) => {
+module.exports = (sequelize, DataTypes) => { // Ensure this DataTypes is used
     const User = sequelize.define('User', {
         username: {
             type: DataTypes.STRING,
@@ -39,6 +39,7 @@ module.exports = (sequelize, DataTypes) => {
         User.hasMany(models.GeneratedContent, { foreignKey: 'userId', as: 'generatedContents' });
         User.hasMany(models.ChatSession, { foreignKey: 'userId', as: 'chatSessions' });
         User.hasMany(models.ImageComment, { foreignKey: 'userId', as: 'imageComments' });
+        User.hasMany(models.ImageLike, { foreignKey: 'userId', as: 'imageLikes' }); // Add this line
     };
 
     return User;

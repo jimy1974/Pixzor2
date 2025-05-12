@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Allow: /gallery
+Allow: /image/*
+Disallow: /chat-history
+Disallow: /files
+Sitemap: https://www.pixzor.com/sitemap.xml

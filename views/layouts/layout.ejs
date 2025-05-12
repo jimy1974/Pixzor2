@@ -3,20 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="referrer" content="no-referrer-when-downgrade">
-    <title><%= locals.title || 'Pixzor' %></title>
-    <meta name="description" content="<%= locals.description || 'Create AI movies, images, and chat with Pixzor' %>">
-    <meta name="keywords" content="AI movies, image generation, chatbot, <%= locals.title || 'Pixzor' %>">
+     <meta name="description" content="<%= locals.description || 'Create AI movies, images, and chat with Pixzor' %>">
+    <meta property="og:title" content="<%= title %>">
+    
+    <meta property="og:image" content="<%= typeof imageUrl !== 'undefined' ? imageUrl : 'https://www.pixzor.com/images/default.jpg' %>">
+    
+    <title><%= title %></title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <meta name="referrer" content="no-referrer-when-downgrade">
+    <meta name="keywords" content="AI movies, image generation, chatbot, <%= locals.title || 'Pixzor' %>">   
     <link rel="preload" href="/js/chat-tab.js" as="script">
     <link rel="preload" href="/js/create-tab.js" as="script">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">    
+    <meta name="csrf-token" content="<%= csrfToken %>">
+    <script>
+        window.isLoggedIn = <%= isLoggedIn ? 'true' : 'false' %>;
+        window.currentUser = <%= user ? JSON.stringify(user) : 'null' %>;
+    </script>
+    <script>
+    // Make backend data available to frontend scripts
+    // Use <%- %> for unescaped JSON output
+    window.RUNWARE_MODELS = <%- JSON.stringify(runwareModels || {}) %>;
+    window.PROMPT_BASED_STYLES = <%- JSON.stringify(promptBasedStyles || []) %>;
+    // Placeholder if we need the original full style list later
+    window.ORIGINAL_STYLES = <%- JSON.stringify(promptBasedStyles || []) %>;
+</script>
+    <script src="https://kit.fontawesome.com/your-kit.js"></script>
     <script src="https://js.stripe.com/v3/"></script>
     <!-- Include imagesLoaded and Masonry via CDN -->
     <script src="https://unpkg.com/imagesloaded@5/imagesloaded.pkgd.min.js"></script>
     <script src="https://unpkg.com/masonry-layout@4/dist/masonry.pkgd.min.js"></script>
-    <!-- Add marked.js for Markdown parsing -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Add marked.js for Markdown parsing -->    
+    <script src="/js/marked.min.js"></script>
+    
 <style>
     /* Base Body Styles */
     body {
@@ -633,24 +653,24 @@
     </header>
 
     <!-- Sidebar -->
-    <div id="main-sidebar" class="sidebar"  >
-        <div class="sidebar-item active" data-section="home" title="Home">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-            </svg>
-        </div>
-        <div class="sidebar-item" data-section="files" title="Files">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-            </svg>
-        </div>
-        <div class="sidebar-item" data-section="chat-history" title="Chat History">
-            <i class="fas fa-list h-6 w-6"></i>
-        </div>
-        <div class="sidebar-item" data-section="gallery" title="Gallery">
-            <i class="fas fa-images h-6 w-6"></i>
-        </div>
+    <div id="main-sidebar" class="sidebar">
+    <div class="sidebar-item active" data-section="home" title="Home">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
     </div>
+    <div class="sidebar-item" data-section="files" title="Files">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+        </svg>
+    </div>
+    <div class="sidebar-item" data-section="chat-history" title="Chat History">
+        <i class="fas fa-list h-6 w-6"></i>
+    </div>
+    <div class="sidebar-item" data-section="gallery" title="Gallery">
+        <i class="fas fa-images h-6 w-6"></i>
+    </div>
+</div>
 
     <!-- Main Content -->
     <main class="p-4 flex flex-col flex-1 overflow-hidden">

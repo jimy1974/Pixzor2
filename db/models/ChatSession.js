@@ -1,7 +1,7 @@
 // models/ChatSession.js
-const { DataTypes } = require('sequelize');
+// const { DataTypes } = require('sequelize'); // Removed this line
 
-module.exports = (sequelize, DataTypes) => {
+module.exports = (sequelize, DataTypes) => { // Ensure this DataTypes is used
     const ChatSession = sequelize.define('ChatSession', {
         id: {
             type: DataTypes.INTEGER,

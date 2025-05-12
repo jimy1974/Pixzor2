@@ -14,6 +14,8 @@ const sharp = require('sharp');
 const fs = require('fs').promises;
 const { RUNWARE_MODELS } = require('../config/modelsConfig'); // Import model config
 const { PROMPT_BASED_STYLES } = require('../config/stylesConfig'); // Import styles config
+const csrf = require('csurf');
+const csrfProtection = csrf({ cookie: true });
 
 // Helper function to calculate dimensions based on ratio and max dimension, ensuring multiples of 64
 function calculateDimensionsForRatio(ratioString, baseDimension = 1024) {
@@ -120,87 +122,148 @@ router.get('/', (req, res) => {
     });
 });
 
-router.get('/image/:id', async (req, res) => {
+router.get('/api/files', async (req, res) => {
+    try {
+        const userId = req.user ? req.user.id : null;
+        console.log(`[API Files] Fetching files for User ID: ${userId}, Session ID: ${req.sessionID}, Cookies:`, req.cookies);
+
+        if (!userId) {
+            console.log('[API Files] No authenticated user');
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const items = await GeneratedContent.findAll({
+            where: { userId, type: 'image' },
+            order: [['createdAt', 'DESC']],
+            include: [{ model: User, as: 'user', attributes: ['username'] }]
+        });
+
+        console.log(`[API Files] Found ${items.length} files for User ID: ${userId}`);
+        res.json({
+            items: items.map(item => ({
+                id: item.id,
+                image: item.contentUrl,
+                thumbnail: item.thumbnailUrl || item.contentUrl,
+                prompt: item.prompt,
+                isPublic: item.isPublic,
+                isOwner: true
+            }))
+        });
+    } catch (error) {
+        console.error('[API Files] Error fetching files:', error.stack);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+
+// Update content visibility
+router.patch('/api/content/:id', csrfProtection, async (req, res) => {
   try {
     const contentId = req.params.id;
     const userId = req.user ? req.user.id : null;
-    console.log(`[Image Route] Fetching image ID: ${contentId}, User ID: ${userId}, Headers:`, req.headers);
+    const { isPublic } = req.body;
 
-    const item = await GeneratedContent.findOne({
-      where: {
-        id: contentId,
-        [Op.or]: [
-          { isPublic: true },
-          { userId: userId },
-        ],
-      },
-      include: [
-        { model: User, as: 'user', attributes: ['id', 'username', 'photo'] },
-        {
-          model: ImageComment,
-          as: 'comments',
-          include: [{ model: User, as: 'user', attributes: ['id', 'username', 'photo'] }],
-          order: [['createdAt', 'ASC']],
-        },
-      ],
-    });
-
-    console.log(`[Image Route] Query result for ID: ${contentId}, Found: ${!!item}, isPublic: ${item?.isPublic}, item.userId: ${item?.userId}`);
-    if (!item) {
-      console.log(`[Image Route] Content not found or access denied for ID: ${contentId}, User: ${userId}`);
-      const message = userId ? 'The requested image could not be found or you do not have access.' : 'Please log in to view this image.';
-      return res.status(404).render('error', {
-        layout: 'layouts/layout',
-        title: 'Image Not Found',
-        message,
-        user: req.user || null,
-        includeChat: false,
-      });
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    const renderData = {
-      title: item.prompt
-        ? `${item.prompt.substring(0, 50)}... | Pixzor`
-        : 'Image Details | Pixzor',
-      description: item.prompt
-        ? `View this AI-generated image: ${item.prompt.substring(0, 100)}...`
-        : 'View this AI-generated image on Pixzor.',
-      imageUrl: item.contentUrl,
-      url: `https://www.pixzor.com/image/${contentId}`,
-      item: {
-        ...item.toJSON(),
-        comments: item.comments.map(c => ({
-          commentText: c.commentText || c.text,
-          user: c.user,
-          createdAt: c.createdAt
-        }))
-      },
-      user: req.user || null,
-      isLoggedIn: req.isAuthenticated ? req.isAuthenticated() : false,
-      csrfToken: req.csrfToken ? req.csrfToken() : '',
-      contentId: item.id,
-      includeChat: false,
-      requestPath: req.path,
-      layout: 'layouts/layout'
-    };
+    if (typeof isPublic !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'Invalid isPublic value' });
+    }
 
-    console.log(`[Image Route] Rendering image-detail for ID: ${contentId}, Data:`, {
-      title: renderData.title,
-      imageUrl: renderData.imageUrl,
-      contentId: renderData.contentId
+    const content = await GeneratedContent.findOne({
+      where: { id: contentId, userId }
     });
-    res.render('image-detail', renderData);
+
+    if (!content) {
+      return res.status(404).json({ success: false, error: 'Content not found or you do not have permission' });
+    }
+
+    content.isPublic = isPublic;
+    await content.save();
+
+    console.log(`[API Content Update] Updated isPublic to ${isPublic} for ID: ${contentId}, User: ${userId}`);
+    res.json({ success: true, message: `Image is now ${isPublic ? 'public' : 'private'}` });
   } catch (error) {
-    console.error(`[Image Route] Error rendering image detail page for ID ${req.params.id}:`, error.stack);
-    res.status(500).render('error', {
-      layout: 'layouts/layout',
-      title: 'Server Error',
-      message: `An error occurred while loading the image details: ${error.message}`,
-      user: req.user || null,
-      includeChat: false,
-    });
+    console.error(`[API Content Update] Error updating content ID ${req.params.id}:`, error.stack);
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 });
+
+// ... existing /image/:id route
+
+router.get('/image/:id', async (req, res) => {
+    try {
+        const contentId = req.params.id;
+        const userId = req.user ? req.user.id : null;
+        console.log(`[Image Route] Fetching image ID: ${contentId}, User ID: ${userId}, Headers:`, req.headers);
+
+        const item = await GeneratedContent.findOne({
+            where: {
+                id: contentId,
+                [Op.or]: [
+                    { isPublic: true },
+                    { userId: userId }
+                ]
+            },
+            include: [
+                { model: User, as: 'user', attributes: ['id', 'username', 'photo'] },
+                {
+                    model: ImageComment,
+                    as: 'comments',
+                    include: [{ model: User, as: 'user', attributes: ['id', 'username', 'photo'] }],
+                    order: [['createdAt', 'ASC']]
+                }
+            ]
+        });
+
+        if (!item) {
+            console.log(`[Image Route] Content not found or access denied for ID: ${contentId}, User: ${userId}`);
+            const message = userId ? 'The requested image could not be found or you do not have access.' : 'Please log in to view this image.';
+            return res.status(404).render('error', {
+                layout: 'layouts/layout',
+                title: 'Image Not Found',
+                message,
+                includeChat: false
+            });
+        }
+
+        const renderData = {
+            title: item.prompt ? `${item.prompt.substring(0, 50)}... | Pixzor` : 'Image Details | Pixzor',
+            description: item.prompt ? `View this AI-generated image: ${item.prompt.substring(0, 100)}...` : 'View this AI-generated image on Pixzor.',
+            imageUrl: item.contentUrl,
+            url: `https://www.pixzor.com/image/${contentId}`,
+            item: {
+                ...item.toJSON(),
+                comments: item.comments.map(c => ({
+                    commentText: c.commentText || c.text,
+                    user: c.user,
+                    createdAt: c.createdAt
+                }))
+            },
+            contentId: item.id,
+            includeChat: false,
+            requestPath: req.path
+            // No need to pass runwareModels or promptBasedStyles, as they're in res.locals
+        };
+
+        console.log(`[Image Route] Rendering image-detail for ID: ${contentId}, Data:`, {
+            title: renderData.title,
+            imageUrl: renderData.imageUrl,
+            contentId: renderData.contentId
+        });
+        res.render('image-detail', renderData);
+    } catch (error) {
+        console.error(`[Image Route] Error rendering image detail page for ID ${req.params.id}:`, error.stack);
+        res.status(500).render('error', {
+            layout: 'layouts/layout',
+            title: 'Server Error',
+            message: `An error occurred while loading the image details: ${error.message}`,
+            includeChat: false
+        });
+    }
+});
+
 
 router.get('/partials/modals', (req, res) => {
     res.render('partials/modals', { layout: false, user: req.user }); // Pass user data
@@ -623,6 +686,27 @@ router.get('/', (req, res) => {
         promptBasedStyles: PROMPT_BASED_STYLES, // Pass the imported styles config
         includeChat: true // Assuming the chat should be included on the homepage
     });
+});
+
+
+router.get('/gallery', async (req, res) => {
+    try {
+        console.log(`[Route] Rendering gallery.ejs for /gallery`);
+        res.render('gallery', {
+            layout: 'layouts/layout',
+            title: 'Pixzor Gallery',
+            description: 'Browse AI-generated images on Pixzor',
+            includeChat: false
+        });
+    } catch (error) {
+        console.error('[Route] Error rendering gallery.ejs:', error.stack);
+        res.status(500).render('error', {
+            layout: 'layouts/layout',
+            title: 'Server Error',
+            message: 'Failed to load gallery.',
+            includeChat: false
+        });
+    }
 });
 
 module.exports = router;

@@ -1,5 +1,5 @@
 // C:\Users\james\Desktop\PixzorProject\newWebsite5\db\index.js
-const { Sequelize } = require('sequelize');
+const { Sequelize, DataTypes } = require('sequelize'); // Destructure DataTypes here
 
 const sequelize = new Sequelize({
     dialect: 'mysql',
@@ -10,10 +10,19 @@ const sequelize = new Sequelize({
 });
 
 const models = {
-    User: require('./models/User')(sequelize),
-    GeneratedContent: require('./models/GeneratedContent')(sequelize),
-    ChatSession: require('./models/ChatSession')(sequelize),
+    User: require('./models/User')(sequelize, DataTypes),
+    GeneratedContent: require('./models/GeneratedContent')(sequelize, DataTypes),
+    ChatSession: require('./models/ChatSession')(sequelize, DataTypes),
+    ImageComment: require('./models/ImageComment')(sequelize, DataTypes),
+    ImageLike: require('./models/ImageLike')(sequelize, DataTypes)
 };
+
+// Ensure all models are valid before associating
+for (const modelName in models) {
+    if (typeof models[modelName].associate !== 'function') {
+        console.warn(`[DB Setup] Model ${modelName} does not have an associate function or is not a valid model.`);
+    }
+}
 
 Object.values(models).forEach(model => {
     if (model.associate) model.associate(models);

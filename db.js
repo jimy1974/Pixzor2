@@ -3,10 +3,11 @@ const { Sequelize, DataTypes } = require('sequelize');
 
 // --- Import Model Definitions ---
 // Corrected paths assuming models are in db/models/
-const defineUserModel = require('./db/models/User'); 
+const defineUserModel = require('./db/models/User');
 const defineGeneratedContentModel = require('./db/models/GeneratedContent');
-const defineChatSessionModel = require('./db/models/ChatSession'); 
-const defineImageCommentModel = require('./models/imageComment'); // Reverted to original path
+const defineChatSessionModel = require('./db/models/ChatSession');
+const defineImageCommentModel = require('./db/models/ImageComment'); // Corrected path
+const defineImageLikeModel = require('./db/models/ImageLike');    // Added ImageLike model
 
 // Database connection settings
 const dbConfig = {
@@ -50,6 +51,7 @@ db.User = defineUserModel(sequelize, DataTypes); // Example assuming default exp
 db.GeneratedContent = defineGeneratedContentModel(sequelize, DataTypes);
 db.ChatSession = defineChatSessionModel(sequelize, DataTypes);
 db.ImageComment = defineImageCommentModel(sequelize, DataTypes);
+db.ImageLike = defineImageLikeModel(sequelize, DataTypes); // Load ImageLike model
 
 // --- Define Associations ---
 // Call associate method if defined in the model files

@@ -1,7 +1,7 @@
 // C:\Users\james\Desktop\PixzorProject\newWebsite5\db\models\GeneratedContent.js
-const { DataTypes } = require('sequelize');
+// const { DataTypes } = require('sequelize'); // Removed this line
 
-module.exports = (sequelize, DataTypes) => {
+module.exports = (sequelize, DataTypes) => { // Ensure this DataTypes is used
     const GeneratedContent = sequelize.define('GeneratedContent', {
         id: {
             type: DataTypes.INTEGER,
@@ -54,6 +54,7 @@ module.exports = (sequelize, DataTypes) => {
     GeneratedContent.associate = (models) => {
         GeneratedContent.belongsTo(models.User, { foreignKey: 'userId', as: 'user' });
         GeneratedContent.hasMany(models.ImageComment, { foreignKey: 'contentId', as: 'comments' });
+        GeneratedContent.hasMany(models.ImageLike, { foreignKey: 'contentId', as: 'likes' }); // Add this line
     };
 
     return GeneratedContent;

@@ -333,17 +333,31 @@ function escapeHTML(str) {
 // --- Image Card Creation ---
 function createImageCard(image) {
     const imageCard = document.createElement('div');
-    imageCard.classList.add('image-card');
+    imageCard.classList.add('image-card', 'relative', 'group', 'cursor-pointer');
     imageCard.dataset.id = image.id;
     imageCard.id = `image-card-${image.id}`;
 
-    // Using thumbnailUrl for the card display, fallback to contentUrl
     imageCard.innerHTML = `
-        <div class="relative group">
-            <img src="${image.thumbnailUrl ?? image.contentUrl}" 
-                  alt="${image.prompt?.substring(0, 50) || 'AI Content'}..." 
-                  class="w-full rounded-lg cursor-pointer block object-cover" 
-                  loading="lazy" />
+        <img src="${image.thumbnailUrl ?? image.contentUrl}" 
+             alt="${image.prompt?.substring(0, 50) || 'AI Content'}..." 
+             class="w-full rounded-lg cursor-pointer block object-cover transition-transform duration-200 ease-in-out group-hover:scale-105" 
+             loading="lazy" />
+        <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity duration-200 ease-in-out rounded-lg"></div>
+        <p class="text-sm text-gray-600 mt-2">${image.prompt ? image.prompt.substring(0, 50) + '...' : 'No description'}</p>
+        ${window.isLoggedIn && image.isOwner ? `
+            <button class="toggle-public-btn absolute top-2 left-2 bg-gray-800 text-white p-2 rounded-full hover:bg-gray-700"
+                    data-id="${image.id}" data-public="${image.isPublic ? '1' : '0'}"
+                    title="${image.isPublic ? 'Make Private' : 'Make Public'}">
+                <i class="fas ${image.isPublic ? 'fa-lock' : 'fa-globe'}"></i>
+            </button>
+        ` : ''}
+        <div class="like-container absolute top-2 right-2 flex flex-col items-center space-y-0"> {/* Changed to flex-col, removed bg and padding */}
+            <button class="like-btn ${image.isLikedByUser ? 'text-red-500' : 'text-gray-700'} hover:text-red-500" {/* Simplified: red if liked, dark gray if not. Hover always makes it red. */}
+                    data-id="${image.id}" title="${image.isLikedByUser ? 'Unlike' : 'Like'}"
+                    ${window.isLoggedIn ? '' : 'disabled'}>
+                <i class="fas fa-heart text-2xl"></i>
+            </button>
+            <span class="like-count text-xs text-gray-200" data-id="${image.id}">${image.likeCount || 0}</span> {/* Adjusted text size/color for visibility */}
         </div>
     `;
     return imageCard;
@@ -421,70 +435,144 @@ async function loadImages() {
     }
 }
 
+
+
 // --- Initialization Function ---
-function initializeGallery() {
-    console.log("[gallery.js] initializeGallery() called.");
-    const imageList = document.getElementById('image-list');
-    const loadingIndicator = document.getElementById('loading-indicator'); 
 
-    if (loadingIndicator) loadingIndicator.style.display = 'block';
+function initializeGallery() {         
 
-    if (imageList) {
-        console.log("[gallery.js] Found #image-list container.");
-        page = 1;
-        hasMoreImages = true;
-        isLoading = false;
-
-        imageList.innerHTML = '<div class="grid-sizer"></div>';
-        if (window.masonryInstance) {
-            try {
-                window.masonryInstance.destroy();
-                window.masonryInstance = null;
-            } catch (e) {
-                console.error("[gallery.js] Error destroying Masonry instance:", e);
+    const contentArea = document.getElementById('content-area') || document.getElementById('chat-messages');
+    if (!contentArea) {
+        console.error('[gallery.js] Content area not found');
+        return;
+    }
+    
+    contentArea.innerHTML = '<p class="text-center text-gray-400 p-4">Loading gallery...</p>';
+    
+    fetch('/api/gallery-content')
+        .then(response => {
+            console.log(`[Gallery Load] Response status: ${response.status}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
-        }
+            return response.json();
+        })
+        .then(data => {
+            console.log('[Gallery Load] Data received:', data);
+            let html;
+            if (data.items && data.items.length > 0) {
+                const gridItems = data.items.map(item => `
+                    <div id="image-card-${item.id}" class="image-card relative group cursor-pointer" data-id="${item.id}">
+                        <img src="${item.thumbnailUrl || item.contentUrl}" 
+                             alt="${item.prompt?.substring(0, 50) || 'Gallery image'}..." 
+                             class="w-full h-full object-cover rounded-lg transition-transform duration-200 ease-in-out group-hover:scale-105"
+                             loading="lazy">
+                        <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity duration-200 ease-in-out rounded-lg"></div>
+                        <p class="text-sm text-gray-600 mt-2">${item.prompt ? item.prompt.substring(0, 50) + '...' : 'No description'}</p>
+                        ${window.isLoggedIn && item.isOwner ? `
+                            <button class="toggle-public-btn absolute top-2 left-2 bg-gray-800 text-white p-2 rounded-full hover:bg-gray-700"
+                                    data-id="${item.id}" data-public="${item.isPublic ? '1' : '0'}"
+                                    title="${item.isPublic ? 'Make Private' : 'Make Public'}">
+                                <i class="fas ${item.isPublic ? 'fa-lock' : 'fa-globe'}"></i>
+                            </button>
+                        ` : ''}
+                        <div class="like-container absolute top-2 right-2 flex items-center space-x-1 bg-white bg-opacity-75 rounded px-1 py-1">
+                            <button class="like-btn text-gray-500 hover:text-red-500 ${item.isLikedByUser ? 'text-red-500' : ''}" 
+                                    data-id="${item.id}" title="${item.isLikedByUser ? 'Unlike' : 'Like'}" 
+                                    ${window.isLoggedIn ? '' : 'disabled'}>
+                                <i class="fas fa-heart"></i>
+                            </button>
+                            <span class="like-count text-sm text-gray-500" data-id="${item.id}">${item.likeCount || 0}</span>
+                        </div>
+                    </div>
+                `).join('');
+                html = `<div id="gallery-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 p-4">
+                          ${gridItems}
+                        </div>`;
+            } else {
+                html = '<p class="text-center text-gray-400 p-4">No images in the gallery yet.</p>';
+            }
+            contentArea.innerHTML = html;
 
-        try {
-            window.masonryInstance = new Masonry(imageList, {
-                itemSelector: '.image-card',
-                columnWidth: '.grid-sizer',
-                percentPosition: true,
-                gutter: 10 
-            });
-            console.log("[gallery.js] Masonry initialized.");
-        } catch (e) {
-             console.error("[gallery.js] Failed to initialize Masonry:", e);
-             imageList.innerHTML = '<p class="text-red-500 text-center col-span-full">Error initializing gallery layout.</p>';
-             if (loadingIndicator) loadingIndicator.style.display = 'none';
-             return;
-        }
-       
-        // Add click listener using named handler
-        imageList.removeEventListener('click', handleImageCardClick);
-        imageList.addEventListener('click', handleImageCardClick);
+            // Initialize Masonry (if used)
+            if (typeof Masonry !== 'undefined' && document.getElementById('gallery-grid')) { // Ensure grid exists
+                window.masonryInstance = new Masonry('#gallery-grid', {
+                    itemSelector: '.image-card',
+                    columnWidth: '.image-card',
+                    percentPosition: true,
+                    gutter: 12
+                });
+            }
+            
+            // Explicitly initialize like buttons after HTML is set
+            console.log('[gallery.js] Gallery HTML injected. Calling initializeLikeButtons().');
+            initializeLikeButtons();
 
-        // Load Initial Images
-        loadImages('/api/gallery-content');
-       
-        // Infinite Scroll (Consider adding cleanup if needed)
-        let scrollTimeout;
-        const handleScroll = () => {
-            clearTimeout(scrollTimeout);
-            scrollTimeout = setTimeout(() => {
-                if ((window.innerHeight + window.scrollY) >= document.documentElement.scrollHeight - 500) { 
-                    if (hasMoreImages && !isLoading) {
-                        loadImages('/api/gallery-content');
+            // Add click handler for image cards (delegated from contentArea)
+            // This existing handler should be fine, as it delegates.
+            // We just need to make sure initializeLikeButtons is called for direct listeners.
+            contentArea.addEventListener('click', (event) => {
+                const imageCard = event.target.closest('.image-card');
+                const toggleBtn = event.target.closest('.toggle-public-btn');
+                
+                const likeBtn = event.target.closest('.like-btn');
+                if (toggleBtn || likeBtn) {
+                    // Skip if clicking toggle or like button
+                    return;
+                }
+                
+                if (toggleBtn) {
+                    const contentId = toggleBtn.dataset.id;
+                    const isPublic = toggleBtn.dataset.public === '1';
+                    console.log(`[Gallery Click] Toggling public status for ID: ${contentId}, Current isPublic: ${isPublic}`);
+                    
+                    fetch(`/api/content/${contentId}`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                        },
+                        body: JSON.stringify({ isPublic: !isPublic })
+                    })
+                        .then(response => response.json())
+                        .then(result => {
+                            if (result.success) {
+                                toggleBtn.dataset.public = isPublic ? '0' : '1';
+                                toggleBtn.title = isPublic ? 'Make Public' : 'Make Private';
+                                toggleBtn.querySelector('i').className = `fas ${isPublic ? 'fa-globe' : 'fa-lock'}`;
+                                showToast(`Image is now ${isPublic ? 'private' : 'public'}.`, 'success');
+                                if (isPublic) {
+                                    document.getElementById(`image-card-${contentId}`)?.remove();
+                                    if (window.masonryInstance) {
+                                        window.masonryInstance.layout();
+                                    }
+                                }
+                            } else {
+                                throw new Error(result.error || 'Failed to update visibility');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('[Gallery Toggle] Error:', error);
+                            showToast(`Failed to update visibility: ${error.message}`, 'error');
+                        });
+                    return;
+                }
+
+                if (imageCard) {
+                    const contentId = imageCard.dataset.id;
+                    const imgElement = imageCard.querySelector('img');
+                    const imageUrl = imgElement?.src;
+                    console.log(`[Gallery Click] Clicked image card. ID: ${contentId}, URL: ${imageUrl}`);
+                    if (window.openCommentsModal) {
+                        openCommentsModal(contentId, imageUrl);
                     }
                 }
-            }, 100);
-        };
-        window.addEventListener('scroll', handleScroll);
-
-    } else {
-        console.error("[gallery.js] initializeGallery: #image-list not found!");
-        if (loadingIndicator) loadingIndicator.style.display = 'none';
-    }
+            });
+        })
+        .catch(error => {
+            console.error('[Gallery Load] Error:', error);
+            contentArea.innerHTML = `<p class="text-center text-red-500 p-4">Error loading gallery: ${error.message}</p>`;
+        });
 }
 
 // Named handler for image card clicks
@@ -503,5 +591,156 @@ function handleImageCardClick(event) {
         }
     }
 }
+        
+// Like/Unlike functionality
+function initializeLikeButtons() {
+    console.log('[gallery.js] Attempting to initialize like buttons...');
+    const likeButtons = document.querySelectorAll('#gallery-grid .like-btn'); // Make selector more specific
+    console.log(`[gallery.js] Found ${likeButtons.length} like buttons within #gallery-grid.`);
+
+    if (likeButtons.length === 0) {
+        const allLikeButtons = document.querySelectorAll('.like-btn');
+        console.log(`[gallery.js] For broader check, found ${allLikeButtons.length} .like-btn elements on the entire page.`);
+    }
+
+    likeButtons.forEach((button, index) => {
+        console.log(`[gallery.js] Processing button ${index + 1} with ID: ${button.dataset.id}`);
+        if (button.dataset.listenerAttached === 'true') {
+            console.log(`[gallery.js] Listener already attached to button ${button.dataset.id}. Skipping.`);
+            return;
+        }
+        button.dataset.listenerAttached = 'true'; // Use a more descriptive dataset property
+        console.log(`[gallery.js] Attaching click listener to like button with ID: ${button.dataset.id}`);
+        
+        button.addEventListener('click', async (event) => {
+            console.log(`[Like Button] Click event fired for button ID: ${button.dataset.id}`);
+            event.preventDefault();
+            event.stopPropagation();
+            if (button.disabled) {
+                showToast('Please log in to like images.', 'error');
+                return;
+            }
+            const contentId = button.dataset.id;
+            const likeContainer = button.closest('.like-container');
+            if (!likeContainer) {
+                console.error(`[Like Button] Like container not found for button with ID: ${contentId}`);
+                showToast('Error interacting with like button.', 'error');
+                return;
+            }
+            const likeCountSpan = likeContainer.querySelector(`.like-count[data-id="${contentId}"]`);
+
+            if (!likeCountSpan) {
+                console.error(`[Like Button] Like count span not found for ID: ${contentId}`);
+                showToast('Error updating like count. Span not found.', 'error');
+                return;
+            }
+
+            button.disabled = true; // Disable button during operation
+
+            let isLiked = button.classList.contains('text-red-500');
+            let currentCount = parseInt(likeCountSpan.textContent) || 0;
+
+            const originallyLiked = isLiked;
+            const originalCount = currentCount;
+            const originalTitle = button.title;
+
+            // Optimistic UI Update
+            if (originallyLiked) { // User wants to unlike
+                button.classList.remove('text-red-500');
+                button.classList.add('text-gray-500');
+                button.title = 'Like';
+                likeCountSpan.textContent = Math.max(0, originalCount - 1);
+            } else { // User wants to like
+                button.classList.add('text-red-500');
+                button.classList.remove('text-gray-500');
+                button.title = 'Unlike';
+                likeCountSpan.textContent = originalCount + 1;
+            }
+
+            try {
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+                const response = await fetch(`/api/content/${contentId}/like`, {
+                    method: originallyLiked ? 'DELETE' : 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': csrfToken
+                    },
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    let errorMsg = `Failed to ${originallyLiked ? 'unlike' : 'like'}. Status: ${response.status}`;
+                    try {
+                        const errorData = await response.json();
+                        errorMsg = errorData.error || errorData.message || errorMsg;
+                    } catch (e) {
+                        try {
+                            const textError = await response.text();
+                            if (textError) errorMsg += `: ${textError.substring(0, 100)}`;
+                        } catch (e2) { /* ignore */ }
+                    }
+                    throw new Error(errorMsg);
+                }
+
+                const newLikeStatus = await response.json();
+                console.log('[Like API Response]', newLikeStatus); // Log server response for debugging
+
+                // Update UI with server's truth, defensively
+                if (typeof newLikeStatus.likeCount === 'number') {
+                    likeCountSpan.textContent = newLikeStatus.likeCount;
+                } else {
+                    console.warn('[Like API] likeCount is missing or not a number:', newLikeStatus.likeCount);
+                }
+
+                if (typeof newLikeStatus.isLiked === 'boolean') {
+                    if (newLikeStatus.isLiked) {
+                        button.classList.add('text-red-500');
+                        button.classList.remove('text-gray-500');
+                        button.title = 'Unlike';
+                    } else {
+                        button.classList.remove('text-red-500');
+                        button.classList.add('text-gray-500');
+                        button.title = 'Like';
+                    }
+                } else {
+                    console.warn('[Like API] isLiked is missing or not a boolean:', newLikeStatus.isLiked);
+                }
+                showToast(originallyLiked ? 'Image unliked.' : 'Image liked!', 'success');
+
+            } catch (error) {
+                console.error('[Like] Error:', error);
+                showToast(`${error.message}`, 'error');
+
+                // Revert UI on API error
+                if (originallyLiked) {
+                    button.classList.add('text-red-500');
+                    button.classList.remove('text-gray-500');
+                } else {
+                    button.classList.remove('text-red-500');
+                    button.classList.add('text-gray-500');
+                }
+                button.title = originalTitle;
+                likeCountSpan.textContent = originalCount;
+            } finally {
+                button.disabled = false; // Re-enable button
+            }
+        });
+    });
+}
+
+
+
+const observer = new MutationObserver(() => initializeLikeButtons());
+observer.observe(document.querySelector('#gallery-grid') || document.querySelector('#image-list'), { childList: true });
+
+observer.observe(document.querySelector('#image-list'), { childList: true });
+
+// Attach like button listeners on gallery load and updates
+document.addEventListener('DOMContentLoaded', () => {
+    if (document.querySelector('#image-list')) {
+        initializeLikeButtons();
+    }
+});
+
 
 // --- END Initialization Function ---

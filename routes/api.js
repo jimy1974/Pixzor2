@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { User, GeneratedContent, ImageComment, ChatSession } = require('../db'); // Adjust path as necessary
+const { User, GeneratedContent, ImageComment, ChatSession, ImageLike } = require('../db'); // Adjust path as necessary
 const { isAuthenticated } = require('../middleware/authMiddleware'); // Adjust path as necessary
 const { generalUpload, UPLOAD_DIR } = require('../config/multerConfig'); // Adjust path as necessary
 const fs = require('fs').promises;
@@ -479,54 +479,87 @@ router.post('/text-to-image', isAuthenticated, async (req, res) => {
 // GET Gallery Content (Publicly Accessible, Paginated)
 router.get('/gallery-content', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 12; // Default limit per page
+    const limit = parseInt(req.query.limit) || 12;
     const offset = (page - 1) * limit;
+    const userId = req.user ? req.user.id : null;
 
-    console.log(`[API Gallery] Fetching page ${page}, limit ${limit}`);
+    console.log(`[API Gallery] Fetching page ${page}, limit ${limit}, userId ${userId}`);
 
     try {
-        // Show all images by default
-        let whereCondition = { type: 'image' }; // Only filter by type, show all images
+        let whereCondition = { 
+            type: 'image',
+            isPublic: true
+        };
+
         if (req.user) {
-            // If user is logged in, show all their images (public and private) and public images from others
             whereCondition = {
+                type: 'image',
                 [Op.or]: [
-                    { userId: req.user.id }, // All images by the logged-in user
-                    { isPublic: true } // Public images by others
+                    { userId: req.user.id },
+                    { isPublic: true }
                 ]
             };
         }
 
+        const include = [
+            { model: User, as: 'user', attributes: ['username'] }
+        ];
+
+        // ImageLike model is no longer included here for likeCount or isLikedByUser,
+        // as these are now handled by Sequelize.literal subqueries.
+
+        const attributes = ['id', 'contentUrl', 'thumbnailUrl', 'prompt', 'type', 'createdAt', 'isPublic', 'userId'];
+
+        // Add like counts and isLikedByUser if ImageLike is included
+        // Add like counts and isLikedByUser using Sequelize.literal subqueries
+        attributes.push(
+            [Sequelize.literal('(SELECT COUNT(*) FROM `ImageLikes` WHERE `ImageLikes`.`contentId` = `GeneratedContent`.`id`)'), 'likeCount']
+        );
+
+        // userId is defined at line 484. Safely use it in the subquery.
+        // The subquery checks if a record exists in "ImageLikes" for the current content and user.
+        if (userId) {
+            attributes.push([Sequelize.literal(`(EXISTS (SELECT 1 FROM \`ImageLikes\` WHERE \`ImageLikes\`.\`contentId\` = \`GeneratedContent\`.\`id\` AND \`ImageLikes\`.\`userId\` = ${parseInt(userId)}))`), 'isLikedByUser']);
+        } else {
+            // For guests or if userId is not available, isLikedByUser is false (represented as 0).
+            attributes.push([Sequelize.literal('0'), 'isLikedByUser']);
+        }
+
         const { count, rows } = await GeneratedContent.findAndCountAll({
             where: whereCondition,
-            limit: limit,
-            offset: offset,
-            order: [['createdAt', 'DESC']], // Show newest first
-            include: [
-                { 
-                    model: User, 
-                    as: 'user', 
-                    attributes: ['username'] // Only need username for the gallery cards
-                }
-            ],
-            attributes: ['id', 'contentUrl', 'thumbnailUrl', 'prompt', 'type', 'createdAt'] // Select necessary fields
+            limit,
+            offset,
+            order: [['createdAt', 'DESC']],
+            include,
+            attributes,
+            group: ['GeneratedContent.id'] // Group by the main entity's ID. User inclusion is handled by Sequelize.
         });
 
-        const totalPages = Math.ceil(count / limit);
+        const totalPages = Math.ceil(count.length ? count.length : count / limit);
 
-        console.log(`[API Gallery] Found ${count} total items, returning ${rows.length} for page ${page}. Total pages: ${totalPages}`);
+        console.log(`[API Gallery] Found ${count.length || count} total items, returning ${rows.length} for page ${page}. Total pages: ${totalPages}`);
 
         res.json({
-            items: rows, // The gallery items for the current page
+            items: rows.map(item => ({
+                id: item.id,
+                contentUrl: item.contentUrl,
+                thumbnailUrl: item.thumbnailUrl || item.contentUrl,
+                prompt: item.prompt,
+                type: item.type,
+                createdAt: item.createdAt,
+                user: item.user ? { username: item.user.username } : null,
+                isPublic: item.isPublic,
+                isOwner: req.user && item.userId === req.user.id,
+                likeCount: item.get('likeCount') ? parseInt(item.get('likeCount')) : 0,
+                isLikedByUser: !!item.get('isLikedByUser')
+            })),
             currentPage: page,
-            totalPages: totalPages,
-            totalItems: count
+            totalPages,
+            totalItems: count.length || count,
+            hasMore: page < totalPages
         });
     } catch (error) {
         console.error(`[API Gallery] Error fetching gallery content for page ${page}:`, error);
-        console.error(`[API Gallery] Error details: ${error.stack}`);
-        console.error(`[API Gallery] Error name: ${error.name}`);
-        console.error(`[API Gallery] Error message: ${error.message}`);
         res.status(500).json({ error: 'Internal server error while fetching gallery content.' });
     }
 });
@@ -660,5 +693,93 @@ router.get('/download-image/:contentId', async (req, res) => {
         }
     }
 });
+
+
+// Like an image (Protected)
+router.post('/content/:contentId/like', isAuthenticated, async (req, res) => {
+    const userId = req.user.id;
+    const contentId = req.params.contentId;
+    console.log(`[API Like] User ${userId} attempting to like content ID: ${contentId}`);
+
+    try {
+        const content = await GeneratedContent.findByPk(contentId);
+        if (!content) {
+            console.log(`[API Like] Content not found for ID: ${contentId}`);
+            return res.status(404).json({ error: 'Content not found' });
+        }
+
+        // Check if the user has already liked this content
+        const existingLike = await ImageLike.findOne({ where: { contentId, userId } });
+        if (existingLike) {
+            // If already liked, perhaps the client-side logic should prevent this call,
+            // but we can return the current state.
+            const currentLikeCount = await ImageLike.count({ where: { contentId } });
+            console.log(`[API Like] User ${userId} already liked content ID: ${contentId}. Current count: ${currentLikeCount}`);
+            return res.status(200).json({ // Changed from 400 to 200 as it's not an error, just a state
+                message: 'You already liked this image',
+                likeCount: currentLikeCount,
+                isLiked: true
+            });
+        }
+
+        // Create the new like
+        await ImageLike.create({ contentId, userId, createdAt: new Date() });
+        console.log(`[API Like] Like added for content ID: ${contentId} by user ${userId}`);
+        
+        // Get the new total like count for this content
+        const likeCount = await ImageLike.count({ where: { contentId } });
+        
+        // Respond with success, new like count, and liked status
+        res.status(201).json({ // 201 Created
+            success: true,
+            message: 'Image liked successfully.',
+            likeCount: likeCount,
+            isLiked: true
+        });
+    } catch (error) {
+        console.error(`[API Like] Error liking content ID ${contentId} for user ${userId}:`, error);
+        res.status(500).json({ error: 'Failed to like image' });
+    }
+});
+
+router.delete('/content/:contentId/like', isAuthenticated, async (req, res) => {
+    const userId = req.user.id;
+    const contentId = req.params.contentId;
+    console.log(`[API Unlike] User ${userId} attempting to unlike content ID: ${contentId}`);
+
+    try {
+        const like = await ImageLike.findOne({ where: { contentId, userId } });
+        if (!like) {
+            // If not liked, perhaps the client-side logic should prevent this call,
+            // but we can return the current state.
+            const currentLikeCount = await ImageLike.count({ where: { contentId } });
+            console.log(`[API Unlike] User ${userId} has not liked content ID: ${contentId}. Current count: ${currentLikeCount}`);
+            return res.status(200).json({ // Changed from 400 to 200
+                message: 'You have not liked this image',
+                likeCount: currentLikeCount,
+                isLiked: false
+            });
+        }
+
+        await like.destroy();
+        console.log(`[API Unlike] Like removed for content ID: ${contentId} by user ${userId}`);
+        
+        // Get the new total like count for this content
+        const likeCount = await ImageLike.count({ where: { contentId } });
+
+        // Respond with success, new like count, and liked status
+        res.status(200).json({
+            success: true,
+            message: 'Image unliked successfully.',
+            likeCount: likeCount,
+            isLiked: false
+        });
+    } catch (error) {
+        console.error(`[API Unlike] Error unliking content ID ${contentId} for user ${userId}:`, error);
+        res.status(500).json({ error: 'Failed to unlike image' });
+    }
+});
+
+// Update /gallery-content to include like data
 
 module.exports = router;
