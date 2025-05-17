@@ -68,6 +68,7 @@ router.get('/content-details/:id', async (req, res) => {
             imageUrl: content.imageUrl, 
             isPublic: content.isPublic,
             createdAt: content.createdAt,
+            isOwner: req.user ? req.user.id === content.userId : false, // Add isOwner flag
             // Add user info if available
             user: content.user ? { username: content.user.username } : null,
             // Map comments to include username
@@ -486,20 +487,14 @@ router.get('/gallery-content', async (req, res) => {
     console.log(`[API Gallery] Fetching page ${page}, limit ${limit}, userId ${userId}`);
 
     try {
-        let whereCondition = { 
+        let whereCondition = {
             type: 'image',
-            isPublic: true
+            isPublic: true // Only fetch public images for the main gallery
         };
 
-        if (req.user) {
-            whereCondition = {
-                type: 'image',
-                [Op.or]: [
-                    { userId: req.user.id },
-                    { isPublic: true }
-                ]
-            };
-        }
+        // The conditional logic for showing a user's own images (including private ones)
+        // has been removed from this route. The public gallery should strictly show public images.
+        // A separate route or view (e.g., /my-content) should be used for users to see their own content.
 
         const include = [
             { model: User, as: 'user', attributes: ['username'] }

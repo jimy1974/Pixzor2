@@ -20,15 +20,10 @@
     <script>
         window.isLoggedIn = <%= isLoggedIn ? 'true' : 'false' %>;
         window.currentUser = <%= user ? JSON.stringify(user) : 'null' %>;
+        window.RUNWARE_MODELS = <%- JSON.stringify(runwareModels || {}) %>;
+        window.PROMPT_BASED_STYLES = <%- JSON.stringify(promptBasedStyles || []) %>;
+        window.ORIGINAL_STYLES = <%- JSON.stringify(promptBasedStyles || []) %>;
     </script>
-    <script>
-    // Make backend data available to frontend scripts
-    // Use <%- %> for unescaped JSON output
-    window.RUNWARE_MODELS = <%- JSON.stringify(runwareModels || {}) %>;
-    window.PROMPT_BASED_STYLES = <%- JSON.stringify(promptBasedStyles || []) %>;
-    // Placeholder if we need the original full style list later
-    window.ORIGINAL_STYLES = <%- JSON.stringify(promptBasedStyles || []) %>;
-</script>
     <script src="https://kit.fontawesome.com/your-kit.js"></script>
     <script src="https://js.stripe.com/v3/"></script>
     <!-- Include imagesLoaded and Masonry via CDN -->
@@ -456,11 +451,13 @@
         position: relative;
     }
     .grid-sizer,
-    .image-card {
-        width: calc(33.333% - 10px);
+    .image-card,
+    .file-card { /* Add .file-card here */
+        width: calc(33.333% - 10px); /* Apply consistent width */
         margin-bottom: 10px;
     }
-    .image-card {
+    .image-card, /* Keep specific .image-card styles if any, or merge if identical */
+    .file-card { /* Keep specific .file-card styles if any, or merge if identical */
         float: left;
         margin-right: 10px;
     }

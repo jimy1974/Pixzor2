@@ -411,10 +411,12 @@ document.addEventListener('DOMContentLoaded', () => {
             imagePrompt.disabled = true;
 
             let apiUrl;
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
             let fetchOptions = {
                 method: 'POST',
                 headers: {
-                    'Accept': 'application/json' 
+                    'Accept': 'application/json',
+                    'X-CSRF-Token': csrfToken // Add CSRF token to headers
                 },
             };
             const formData = new FormData();

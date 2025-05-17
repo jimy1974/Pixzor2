@@ -297,39 +297,45 @@ router.get('/user-data', (req, res) => {
     }
 });
 
-router.post('/buy-tokens', express.json(), async (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ error: 'Login required' });
-    const { tokens, price } = req.body;
-    const validBundles = {
-        '300': 300,  
-        '500': 500, 
-        '1200': 1000 
-    };
-    if (!validBundles[tokens] || validBundles[tokens] !== parseFloat(price) * 100) {
-         console.error(`Invalid token bundle or price mismatch. Received tokens: ${tokens}, price: ${price}. Expected price: ${validBundles[tokens]/100}`);
-        return res.status(400).json({ error: 'Invalid token bundle or price mismatch' });
-    }
-    try {
-        const session = await stripe.checkout.sessions.create({
-            payment_method_types: ['card'],
-            line_items: [{
-                price_data: {
-                    currency: 'gbp', 
-                    product_data: { name: `${tokens} Tokens` },
-                    unit_amount: validBundles[tokens], // Price in pence
-                },
-                quantity: 1,
-            }],
-            mode: 'payment',
-            success_url: `${process.env.APP_BASE_URL || 'http://localhost:3000'}/success?session_id={CHECKOUT_SESSION_ID}`, 
-            cancel_url: `${process.env.APP_BASE_URL || 'http://localhost:3000'}/?canceled=true`,
-            metadata: { userId: req.user.id, tokens: tokens }, 
-        });
-        res.json({ url: session.url });
-    } catch (error) {
-        console.error('Error creating Stripe checkout session:', error);
-        res.status(500).json({ error: 'Failed to create checkout session' });
-    }
+router.post('/buy-tokens', csrfProtection, express.json(), async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ success: false, error: 'Login required' });
+  }
+  const { credits, price } = req.body; // Changed from tokens to credits
+  const validBundles = {
+    '3': { credits: 3, price: 300 },    // 3 credits = £3.00 (300 pence)
+    '5': { credits: 5, price: 500 },    // 5 credits = £5.00
+    '10': { credits: 10, price: 1000 }, // 10 credits = £10.00
+    '20': { credits: 20, price: 2000 }, // 20 credits = £20.00
+    '30': { credits: 30, price: 3000 }, // 30 credits = £30.00
+    '50': { credits: 50, price: 5000 }, // 50 credits = £50.00
+    '100': { credits: 100, price: 10000 } // 100 credits = £100.00
+  };
+  if (!validBundles[credits] || validBundles[credits].price !== parseFloat(price) * 100) {
+    console.error(`Invalid credit bundle or price mismatch. Received credits: ${credits}, price: ${price}. Expected price: ${validBundles[credits]?.price / 100}`);
+    return res.status(400).json({ success: false, error: 'Invalid credit bundle or price mismatch' });
+  }
+  try {
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'gbp',
+          product_data: { name: `${credits} Credits` },
+          unit_amount: validBundles[credits].price, // Price in pence
+        },
+        quantity: 1,
+      }],
+      mode: 'payment',
+      success_url: `${process.env.APP_BASE_URL || 'http://localhost:3000'}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.APP_BASE_URL || 'http://localhost:3000'}/?canceled=true`,
+      metadata: { userId: req.user.id, credits: credits }, // Store credits in metadata
+    });
+    res.json({ success: true, url: session.url });
+  } catch (error) {
+    console.error('Error creating Stripe checkout session:', error);
+    res.status(500).json({ success: false, error: 'Failed to create checkout session' });
+  }
 });
 
 router.get('/success', async (req, res) => {

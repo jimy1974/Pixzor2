@@ -255,17 +255,62 @@ function openCommentsModal(contentId, imageUrl) {
         }
         if (confirm('Are you sure you want to delete this image permanently?')) {
             try {
-                const response = await fetch(`/api/content/${contentIdToDelete}`, { method: 'DELETE' }); 
+                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                const response = await fetch(`/api/content/${contentIdToDelete}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRF-Token': csrfToken
+                    }
+                });
                 const result = await response.json();
                 if (response.ok) {
                     showToast(result.message || 'Image deleted successfully.', 'success');
-                    document.getElementById(`image-card-${contentIdToDelete}`)?.remove(); 
-                    modal.classList.add('hidden'); 
-                    if (window.masonryInstance) {
-                        console.log('[gallery.js] Re-laying out Masonry after delete.');
-                        window.masonryInstance.layout(); 
-                    } 
-                    history.back();
+                    const elementToRemove = document.getElementById(`image-card-${contentIdToDelete}`);
+                    console.log('[gallery.js] Delete attempt. Element to remove:', elementToRemove, 'Current window.masonryInstance:', window.masonryInstance);
+                    if (elementToRemove && window.masonryInstance && typeof window.masonryInstance.remove === 'function' && typeof window.masonryInstance.layout === 'function') {
+                        console.log('[gallery.js] Removing item from Masonry and DOM using valid masonryInstance.');
+                        window.masonryInstance.remove(elementToRemove);
+                        elementToRemove.remove();
+                        window.masonryInstance.layout();
+                    } else if (elementToRemove) {
+                        console.log('[gallery.js] masonryInstance not found or invalid during delete. Removing item from DOM only. Masonry instance was:', window.masonryInstance);
+                        elementToRemove.remove();
+                    }
+                    modal.classList.add('hidden');
+                    // history.back(); // We will navigate or reload explicitly
+
+                    // Refresh the view
+                    const currentPath = window.location.pathname;
+                    const historyState = history.state; // Get current history state
+
+                    console.log(`[gallery.js] Post-delete: currentPath='${currentPath}', historyState=`, historyState);
+
+                    if (currentPath.startsWith('/gallery') || currentPath === '/' || (historyState && historyState.section === 'gallery')) {
+                        console.log('[gallery.js] Refreshing gallery view by calling initializeGallery.');
+                        if (typeof initializeGallery === 'function') {
+                            initializeGallery();
+                        } else {
+                            console.error('[gallery.js] initializeGallery function not found for refresh.');
+                            history.back(); // Fallback
+                        }
+                    } else if (currentPath.startsWith('/files') || (historyState && historyState.section === 'files')) {
+                        console.log('[gallery.js] Refreshing files view by clicking sidebar item.');
+                        const filesSidebarItem = document.querySelector('.sidebar-item[data-section="files"]');
+                        if (filesSidebarItem) {
+                            filesSidebarItem.click(); // Simulate click to reload files section
+                        } else {
+                            console.error('[gallery.js] Files sidebar item not found for refresh.');
+                            history.back(); // Fallback
+                        }
+                    } else {
+                         // Fallback for direct /image/:id or unknown states
+                        console.log('[gallery.js] Deletion successful. Navigating back or reloading.');
+                        if (document.referrer && (document.referrer.includes('/gallery') || document.referrer.includes('/files'))) {
+                            history.back(); // If previous page was gallery or files, go back
+                        } else {
+                            window.location.href = '/gallery'; // Fallback to gallery
+                        }
+                    }
                 } else {
                     throw new Error(result.error || 'Failed to delete image.');
                 }
@@ -486,22 +531,47 @@ function initializeGallery() {
                         </div>
                     </div>
                 `).join('');
-                html = `<div id="gallery-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 p-4">
+                // Ensure the grid-sizer is part of the generated HTML for image-list
+                html = `<div id="image-list" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 p-4">
+                          <div class="grid-sizer"></div>
                           ${gridItems}
                         </div>`;
             } else {
-                html = '<p class="text-center text-gray-400 p-4">No images in the gallery yet.</p>';
+                // If no items, still provide the image-list container for consistency, Masonry might not initialize though.
+                html = `<div id="image-list" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 p-4">
+                          <div class="grid-sizer"></div>
+                          <p class="text-center text-gray-400 p-4 col-span-full">No images in the gallery yet.</p>
+                        </div>`;
             }
             contentArea.innerHTML = html;
 
             // Initialize Masonry (if used)
-            if (typeof Masonry !== 'undefined' && document.getElementById('gallery-grid')) { // Ensure grid exists
-                window.masonryInstance = new Masonry('#gallery-grid', {
-                    itemSelector: '.image-card',
-                    columnWidth: '.image-card',
-                    percentPosition: true,
-                    gutter: 12
-                });
+            const imageListElement = document.getElementById('image-list');
+            if (typeof Masonry !== 'undefined' && imageListElement && data.items && data.items.length > 0) { // Ensure grid exists and has items
+                try {
+                    const msnry = new Masonry('#image-list', { // Target #image-list
+                        itemSelector: '.image-card',
+                        columnWidth: '.grid-sizer', // Use the sizer element for column width
+                        gutter: 12,
+                        percentPosition: true
+                    });
+                    window.masonryInstance = msnry;
+                    console.log('[gallery.js] Masonry instance CREATED and assigned for #image-list:', window.masonryInstance);
+
+                    // Ensure layout after initial images are loaded
+                    imagesLoaded(imageListElement).on('always', function () {
+                        console.log('[gallery.js] Initial images loaded (initializeGallery), layout Masonry.');
+                        if (window.masonryInstance) {
+                            window.masonryInstance.layout();
+                        }
+                    });
+                } catch (e) {
+                    console.error('[gallery.js] Error initializing Masonry in initializeGallery:', e);
+                    window.masonryInstance = null; // Ensure it's null if init failed
+                }
+            } else {
+                console.log('[gallery.js] Masonry NOT initialized in initializeGallery. Conditions: Masonry lib loaded?', !!(typeof Masonry !== 'undefined'), 'imageListElement exists?', !!imageListElement, 'Has items?', !!(data.items && data.items.length > 0));
+                window.masonryInstance = null; // Ensure it's null if not initialized
             }
             
             // Explicitly initialize like buttons after HTML is set
@@ -595,13 +665,13 @@ function handleImageCardClick(event) {
 // Like/Unlike functionality
 function initializeLikeButtons() {
     console.log('[gallery.js] Attempting to initialize like buttons...');
-    const likeButtons = document.querySelectorAll('#gallery-grid .like-btn'); // Make selector more specific
-    console.log(`[gallery.js] Found ${likeButtons.length} like buttons within #gallery-grid.`);
+    // Use #image-list as this is the ID used by initializeGallery and loadImages
+    const likeButtons = document.querySelectorAll('#image-list .like-btn');
+    console.log(`[gallery.js] Found ${likeButtons.length} like buttons within #image-list.`);
 
-    if (likeButtons.length === 0) {
-        const allLikeButtons = document.querySelectorAll('.like-btn');
-        console.log(`[gallery.js] For broader check, found ${allLikeButtons.length} .like-btn elements on the entire page.`);
-    }
+    // Removed the broader check as we are now targeting the correct container for gallery view.
+    // If this function is also used by other views (like #file-list), those views must ensure their
+    // like buttons are also selectable or call this function with a specific context.
 
     likeButtons.forEach((button, index) => {
         console.log(`[gallery.js] Processing button ${index + 1} with ID: ${button.dataset.id}`);

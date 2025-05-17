@@ -312,13 +312,55 @@ sidebarItems.forEach(item => {
                                 ` : ''}
                             </div>
                         `).join('');
+                        // Add grid-sizer for Masonry
                         html = `<div id="file-list" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 p-4">
+                                  <div class="grid-sizer"></div>
                                   ${gridItems}
                                 </div>`;
                     } else {
-                        html = `<p class="text-center text-gray-400 p-4">${data.message || 'No files yet.'}</p>`;
+                         // If no items, still provide the file-list container for consistency
+                        html = `<div id="file-list" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 p-4">
+                                  <div class="grid-sizer"></div>
+                                  <p class="text-center text-gray-400 p-4 col-span-full">${data.message || 'No files yet.'}</p>
+                                </div>`;
                     }
                     contentArea.innerHTML = html;
+
+                    // Initialize Like Buttons for the newly added file cards
+                    if (typeof initializeLikeButtons === 'function') {
+                        console.log('[core.js Files Load] Calling initializeLikeButtons for #file-list content.');
+                        initializeLikeButtons();
+                    } else {
+                        console.warn('[core.js Files Load] initializeLikeButtons function not found. Make sure gallery.js is loaded and initializeLikeButtons is global.');
+                    }
+
+                    // Initialize Masonry for the #file-list if items exist
+                    const fileListElement = document.getElementById('file-list');
+                    if (typeof Masonry !== 'undefined' && fileListElement && data.items && data.items.length > 0) {
+                        try {
+                            const msnry = new Masonry(fileListElement, {
+                                itemSelector: '.file-card', // Correct selector for items in #file-list
+                                columnWidth: '.grid-sizer',
+                                gutter: 12,
+                                percentPosition: true
+                            });
+                            window.masonryInstance = msnry; // Assign to global scope
+                            console.log('[core.js Files Load] Masonry instance CREATED and assigned for #file-list:', window.masonryInstance);
+                            
+                            imagesLoaded(fileListElement).on('always', function() {
+                                console.log('[core.js Files Load] imagesLoaded complete for #file-list, layout Masonry.');
+                                if (window.masonryInstance) {
+                                    window.masonryInstance.layout();
+                                }
+                            });
+                        } catch (e) {
+                            console.error('[core.js Files Load] Error initializing Masonry for #file-list:', e);
+                            window.masonryInstance = null;
+                        }
+                    } else {
+                        console.log('[core.js Files Load] Masonry NOT initialized for #file-list. Conditions: Masonry lib?', !!(typeof Masonry !== 'undefined'), 'fileListElement?', !!fileListElement, 'Has items?', !!(data.items && data.items.length > 0));
+                        window.masonryInstance = null; // Ensure it's null if not initialized
+                    }
 
                     contentArea.addEventListener('click', (event) => {
                         const fileCard = event.target.closest('.file-card');
