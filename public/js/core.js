@@ -751,9 +751,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     console.log(`Attempting to buy ${tokens} tokens for price: £${price}`);
                     try {
+                        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
                         const response = await fetch('/payment/create-checkout-session', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-Token': csrfToken
+                            },
                             body: JSON.stringify({ tokens: tokens, price: price })
                         });
                         console.log('Backend response status:', response.status);

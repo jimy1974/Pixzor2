@@ -7,11 +7,11 @@
     </div>
     
     <!-- Modified: Create Images Content Area -->
-    <div class="sub-content p-2 h-full overflow-y-auto bg-gray-800 text-gray-300 text-sm" id="create-images-content">
-        <div class="flex w-full gap-2">
-
+    <div class="sub-content flex flex-col p-1 h-full overflow-y-auto bg-gray-800 text-gray-300 text-sm" id="create-images-content">
+        <!-- Row 1: Thumbnail and Prompt -->
+        <div class="flex w-full gap-1 items-start">
             <!-- Img2Img Thumbnail Upload (Pixzor Styled) -->
-            <div id="thumbnail-container" class="flex-shrink-0 relative w-16 h-16 overflow-hidden rounded">
+            <div id="thumbnail-container" class="flex-shrink-0 relative w-12 h-12 sm:w-16 sm:h-16 overflow-hidden rounded">
                 <label for="image-upload-input" class="cursor-pointer block w-full h-full">
                     <!-- Placeholder Icon (shown by default) -->
                     <div id="thumbnail-placeholder-icon" class="w-full h-full bg-gray-700 flex items-center justify-center text-gray-400 text-2xl rounded border border-gray-600">
@@ -26,84 +26,83 @@
                 </button>
             </div>
 
-            <!-- Prompt and Controls Container -->
-            <div class="flex-grow flex flex-col gap-2">
-                <!-- Prompt Input (Pixzor Styled) -->
-                <textarea id="image-prompt-input" name="prompt" class="w-full p-2 rounded bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-green-500 resize-none text-sm" placeholder="Describe the image you want to create..." rows="2"></textarea>
-
-                <!-- Controls Row (Pixzor Styled) -->
-                <div class="flex flex-wrap items-center gap-2 text-xs">
-
-                    <!-- Aspect Ratio Dropdown (Pixzor Styled + Fix Applied) -->
-                    <div class="relative inline-block text-left">
-                        <button id="aspect-ratio-dropdown" type="button" class="inline-flex items-center justify-center w-full rounded border border-gray-600 shadow-sm px-2 py-1 bg-gray-700 text-xs font-medium text-gray-300 hover:bg-gray-600 focus:outline-none focus:ring-1 focus:ring-offset-0 focus:ring-offset-gray-800 focus:ring-green-500" data-value="1:1">
-                            <span id="selected-ratio-icon"><i class="fas fa-square"></i></span>
-                            <span id="selected-ratio-text" class="ml-1">1:1</span> <!-- Span for dynamic text -->
-                            <svg class="-mr-1 ml-1 h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-                            </svg>
-                        </button>
-                        <div id="aspect-ratio-options" class="dropdown-options origin-bottom-left absolute bottom-full left-0 mb-1 w-max-content rounded-md shadow-lg bg-gray-700 ring-1 ring-black ring-opacity-5 focus:outline-none hidden z-50" role="menu" aria-orientation="vertical" aria-labelledby="aspect-ratio-dropdown">
-                            <div class="py-1" role="none">
-                                <a href="#" class="aspect-ratio-option text-gray-300 hover:text-white block px-3 py-1 text-xs hover:bg-gray-600" role="menuitem" data-value="1:1" title="Square (1:1)"><i class="fas fa-square w-4 inline-block mr-1"></i> 1:1</a>
-                                <a href="#" class="aspect-ratio-option text-gray-300 hover:text-white block px-3 py-1 text-xs hover:bg-gray-600" role="menuitem" data-value="16:9" title="Wide (16:9)"><i class="fas fa-desktop w-4 inline-block mr-1"></i> 16:9</a>
-                                <a href="#" class="aspect-ratio-option text-gray-300 hover:text-white block px-3 py-1 text-xs hover:bg-gray-600" role="menuitem" data-value="9:16" title="Tall (9:16)"><i class="fas fa-mobile-alt w-4 inline-block mr-1"></i> 9:16</a>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Style Select Container (Populated by JS) -->
-                    <div id="style-select-container" class="relative inline-block text-left">
-                        <select id="style-select" name="style" class="w-full rounded border border-gray-600 shadow-sm px-2 py-1 bg-gray-700 text-xs font-medium text-gray-300 hover:bg-gray-600 focus:outline-none focus:ring-1 focus:ring-offset-0 focus:ring-offset-gray-800 focus:ring-green-500" title="Select Style">
-                            <option value="" selected>Style: None</option>
-                            <!-- Styles will be populated dynamically -->
-                        </select>
-                        <input type="hidden" id="style-label-input" name="styleLabel" value=""> <!-- Hidden input for style label -->
-                        <input type="hidden" id="negative-prompt-input" name="negativePromptOverride" value=""> <!-- Hidden input for style-specific negative prompt -->
-                    </div>
-
-                    <!-- Model Select (Pixzor Styled & Naming) -->
-                    <div class="relative">
-                        <%# ** CORRECTED MODEL LIST BELOW ** %>
-                        <select id="image-model-select" name="model" class="appearance-none w-full bg-gray-700 border border-gray-600 text-gray-300 py-1 pl-2 pr-7 rounded text-xs focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500" title="Select Model">
-                            <%# Format: Model Name %>
-                            <%# Value is Runware ID, data-cost is *actual* Runware cost %>
-                            <option value="runware:100@1" data-cost="0.0065" selected>Model: Flux Schnell</option> <%# Scaled cost: 0.0013*5=0.0065, rounded to 0.01 %>
-                            <option value="runware:101@1" data-cost="0.016">Model: Flux Dev</option> <%# Scaled cost: 0.0032*5=0.016, rounded to 0.02 %>
-                            <option value="rundiffusion:130@100" data-cost="0.016">Model: Juggernaut Pro</option> <%# Scaled cost: 0.0032*5=0.016, rounded to 0.02 %>
-                            <option value="civitai:133005@782002" data-cost="0.0065">Face / Character</option> <%# Scaled cost: 0.0013*5=0.0065, rounded to 0.01 %>
-                        </select>
-                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 text-gray-400">
-                            <svg class="fill-current h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-                            </svg>
-                        </div>
-                    </div>
-
-                    <!-- Enhance Button (Placeholder - Pixzor Styled) -->
-                    <button id="enhance-prompt-button" class="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2 py-1 rounded border border-gray-600 text-xs" title="Enhance Prompt (Future Feature)">
-                        <i class="fas fa-magic"></i>
-                    </button>
-
-                    <!-- Strength Slider Container (Pixzor Styled) -->
-                    <div id="image-strength-control" class="items-center gap-1 hidden ml-2">
-                        <label for="image-strength-slider" class="block text-xs font-medium text-gray-400">Strength:</label>
-                        <input type="range" id="image-strength-slider" name="strength" min="0" max="1" step="0.01" value="0.75" class="w-20 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer range-sm align-middle accent-green-500">
-                        <span id="image-strength-value-display" class="text-xs text-gray-400 w-6 text-right">0.75</span>
-                    </div>
-
-                    <!-- Generate Button (Pixzor Styled) -->
-                    <button id="image-generate-button" type="button" class="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-1 rounded transition-colors text-sm flex items-center gap-1 ml-auto" disabled>
-                        <span>Generate</span>
-                        <span id="image-token-cost-display">($0.01)</span>
-                    </button>
-                </div>
-
-                <!-- Feedback Area -->
-                <div id="image-gen-feedback" class="mt-2 text-xs text-gray-400 min-h-[1.2em]"></div>
-
+            <!-- Prompt Input Container -->
+            <div class="flex-grow">
+                <textarea id="image-prompt-input" name="prompt" class="w-full p-2 rounded bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-green-500 resize-none text-sm" placeholder="Describe the image you want to create..." rows="2" style="height: 3.5rem; max-height: 13.5rem;"></textarea>
             </div>
         </div>
+
+        <!-- Row 2: Controls Row (Moved Here) -->
+        <!-- Controls Row (Pixzor Styled) -->
+        <div class="flex flex-wrap items-center gap-1 text-xs">
+            <!-- Aspect Ratio Dropdown (Pixzor Styled + Fix Applied) -->
+            <div class="relative inline-block text-left">
+                <button id="aspect-ratio-dropdown" type="button" class="inline-flex items-center justify-center rounded border border-gray-600 shadow-sm px-2 py-1 bg-gray-700 text-xs font-medium text-gray-300 hover:bg-gray-600 focus:outline-none focus:ring-1 focus:ring-offset-0 focus:ring-offset-gray-800 focus:ring-green-500" data-value="1:1">
+                    <span id="selected-ratio-icon"><i class="fas fa-square"></i></span>
+                    <span id="selected-ratio-text" class="ml-1">1:1</span> <!-- Span for dynamic text -->
+                    <svg class="-mr-1 ml-1 h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+                <div id="aspect-ratio-options" class="dropdown-options origin-bottom-left absolute bottom-full left-0 mb-1 w-max-content rounded-md shadow-lg bg-gray-700 ring-1 ring-black ring-opacity-5 focus:outline-none hidden z-50" role="menu" aria-orientation="vertical" aria-labelledby="aspect-ratio-dropdown">
+                    <div class="py-1" role="none">
+                        <a href="#" class="aspect-ratio-option text-gray-300 hover:text-white block px-3 py-1 text-xs hover:bg-gray-600" role="menuitem" data-value="1:1" title="Square (1:1)"><i class="fas fa-square w-4 inline-block mr-1"></i> 1:1</a>
+                        <a href="#" class="aspect-ratio-option text-gray-300 hover:text-white block px-3 py-1 text-xs hover:bg-gray-600" role="menuitem" data-value="16:9" title="Wide (16:9)"><i class="fas fa-desktop w-4 inline-block mr-1"></i> 16:9</a>
+                        <a href="#" class="aspect-ratio-option text-gray-300 hover:text-white block px-3 py-1 text-xs hover:bg-gray-600" role="menuitem" data-value="9:16" title="Tall (9:16)"><i class="fas fa-mobile-alt w-4 inline-block mr-1"></i> 9:16</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Style Select Container (Populated by JS) -->
+            <div id="style-select-container" class="relative inline-block text-left">
+                <select id="style-select" name="style" class="rounded border border-gray-600 shadow-sm px-2 py-1 bg-gray-700 text-xs font-medium text-gray-300 hover:bg-gray-600 focus:outline-none focus:ring-1 focus:ring-offset-0 focus:ring-offset-gray-800 focus:ring-green-500" title="Select Style">
+                    <option value="" selected>Style: None</option>
+                    <!-- Styles will be populated dynamically -->
+                </select>
+                <input type="hidden" id="style-label-input" name="styleLabel" value=""> <!-- Hidden input for style label -->
+                <input type="hidden" id="negative-prompt-input" name="negativePromptOverride" value=""> <!-- Hidden input for style-specific negative prompt -->
+            </div>
+<div class="block sm:hidden w-full basis-full h-0"></div> <!-- Force line break for mobile, hide on sm+ -->
+
+            <!-- Model Select (Pixzor Styled & Naming) -->
+            <div class="relative inline-block text-left">
+                <%# ** CORRECTED MODEL LIST BELOW ** %>
+                <select id="image-model-select" name="model" class="appearance-none bg-gray-700 border border-gray-600 text-gray-300 py-1 pl-2 pr-7 rounded text-xs focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500" title="Select Model">
+                    <%# Format: Model Name %>
+                    <%# Value is Runware ID, data-cost is *actual* Runware cost %>
+                    <option value="runware:100@1" data-cost="0.0065" selected>Model: Flux Schnell</option> <%# Scaled cost: 0.0013*5=0.0065, rounded to 0.01 %>
+                    <option value="runware:101@1" data-cost="0.016">Model: Flux Dev</option> <%# Scaled cost: 0.0032*5=0.016, rounded to 0.02 %>
+                    <option value="rundiffusion:130@100" data-cost="0.016">Model: Juggernaut Pro</option> <%# Scaled cost: 0.0032*5=0.016, rounded to 0.02 %>
+                    <option value="civitai:133005@782002" data-cost="0.0065">Face / Character</option> <%# Scaled cost: 0.0013*5=0.0065, rounded to 0.01 %>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 text-gray-400">
+                    <svg class="fill-current h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Enhance Button (Placeholder - Pixzor Styled) -->
+            <button id="enhance-prompt-button" class="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2 py-1 rounded border border-gray-600 text-xs" title="Enhance Prompt (Future Feature)">
+                <i class="fas fa-magic"></i>
+            </button>
+
+            <!-- Strength Slider Container (Pixzor Styled) -->
+            <div id="image-strength-control" class="items-center gap-1 hidden ml-2">
+                <label for="image-strength-slider" class="block text-xs font-medium text-gray-400">Strength:</label>
+                <input type="range" id="image-strength-slider" name="strength" min="0" max="1" step="0.01" value="0.75" class="w-20 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer range-sm align-middle accent-green-500">
+                <span id="image-strength-value-display" class="text-xs text-gray-400 w-6 text-right">0.75</span>
+            </div>
+
+            <!-- Generate Button (Pixzor Styled) -->
+            <button id="image-generate-button" type="button" class="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-1 rounded transition-colors text-sm flex items-center gap-1" disabled>
+                <span>Generate</span>
+                <span id="image-token-cost-display">($0.01)</span>
+            </button>
+        </div>
+
+        <!-- Feedback Area (Moved Here) -->
+        <div id="image-gen-feedback" class="text-xs text-gray-400 min-h-[1.2em]"></div>
     </div>
    
 </div>
@@ -157,10 +156,6 @@
 }
 
 /* Ensure thumbnail container doesn't collapse */
-#thumbnail-container {
-    min-width: 4rem; /* Corresponds to w-16 */
-    min-height: 4rem; /* Corresponds to h-16 */
-}
 
 /* Custom scrollbar styles */
 .custom-scrollbar::-webkit-scrollbar {

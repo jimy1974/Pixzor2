@@ -94,8 +94,33 @@ const modelStyles = {
 
 // --- Auto-resize textarea logic --- 
 function autoResizeTextarea(textarea) {
-    textarea.style.height = 'auto'; 
-    textarea.style.height = (textarea.scrollHeight) + 'px'; 
+    // Attempt to get root font size for rem to px conversion, fallback to 16px
+    const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    
+    // These should match the inline style values in chat-tab.ejs
+    const minHeightRem = 3.5;
+    const maxHeightRem = 13.5;
+
+    const minHeightPx = minHeightRem * rootFontSize;
+    const maxHeightPx = maxHeightRem * rootFontSize;
+
+    textarea.style.height = 'auto'; // Reset height to correctly calculate scrollHeight
+    let newHeight = textarea.scrollHeight;
+
+    // Ensure the new height is at least our desired minimum
+    if (newHeight < minHeightPx) {
+        newHeight = minHeightPx;
+    }
+
+    // Ensure the new height does not exceed our desired maximum
+    if (newHeight > maxHeightPx) {
+        newHeight = maxHeightPx;
+        textarea.style.overflowY = 'auto'; // Show scrollbar if content exceeds max height
+    } else {
+        textarea.style.overflowY = 'hidden'; // Hide scrollbar if content is within max height
+    }
+    
+    textarea.style.height = newHeight + 'px';
 }
 
 // --- NEW: Function to restore content area ---
