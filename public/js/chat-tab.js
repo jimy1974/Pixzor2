@@ -1,191 +1,344 @@
-// public/js/chat-tab.js
 console.log('chat-tab.js: Script loaded.');
 
-// Keep track of which scripts are loaded for different tabs if needed
-// (Currently create-tab.js seems loaded globally via layout.ejs preload/script tag)
-// const tabScripts = {
-//     'create-images': '/js/create-tab.js',
-//     'create-videos': '/js/create-videos-tab.js' // Example
-// };
-// const loadedScripts = new Set();
-
-// function loadTabScriptIfNeeded(tabName) {
-//     if (!loadedScripts.has(tabName) && tabScripts[tabName]) {
-//         console.log(`[Chat Tab] Loading script for: ${tabName}`);
-//         const script = document.createElement('script');
-//         script.src = tabScripts[tabName];
-//         script.onload = () => loadedScripts.add(tabName);
-//         script.onerror = () => console.error(`Failed to load ${tabName} script`);
-//         document.body.appendChild(script);
-//     }
-// }
-
-function setupChat() {
-    console.log("[Chat Tab] Attempting setupChat...");
-    const contentArea = document.getElementById('chat-messages'); // Main message display area
-    const chatSubmit = document.querySelector('#chat-submit[data-mode="chat-talk"]');
-    const input = document.querySelector('#chat-talk-input');
-
-    // Prevent attaching listeners multiple times
-    if (!chatSubmit || chatSubmit.dataset.listenerAttached === 'true') {
-        if (!chatSubmit) console.log("[Chat Tab] setupChat: chatSubmit button not found.");
-        // else console.log("[Chat Tab] setupChat: Listener already attached.");
-        return; // Don't attach listener if button missing or already attached
-    }
-
-    console.log("[Chat Tab] Found chat elements, attaching listener:", { chatSubmit, input });
-    chatSubmit.dataset.listenerAttached = 'true'; // Mark as attached
-
-    // --- Add auto-resize listener for the textarea ---
-    if (input && input.tagName === 'TEXTAREA') { // Ensure it's a textarea
-        input.addEventListener('input', () => {
-            input.style.height = 'auto'; // Reset height to recalculate
-            // Set height to scrollHeight, capped by CSS max-height
-            input.style.height = `${input.scrollHeight}px`; 
-        });
-        // Trigger resize on initial load in case there's pre-filled text (unlikely here)
-        // input.dispatchEvent(new Event('input')); 
-    }
-    // --- End auto-resize listener ---
-
-    let currentChatSessionId = null; // Variable to hold the unique ID for the current chat session in this tab
-
-    chatSubmit.addEventListener('click', () => {
-        console.log("[Chat Tab] Chat submit clicked.");
-        const message = input?.value.trim();
-        const contentArea = document.getElementById('chat-messages'); // Re-get content area here for safety
-
-        // Ensure contentArea exists before trying to modify it
-        if (!contentArea) {
-            console.error("[Chat Tab] Cannot find #chat-messages to clear/append.");
-            return;
+const waitForElement = (selector, timeout = 5000) => {
+    return new Promise((resolve, reject) => {
+        const element = document.querySelector(selector);
+        if (element) {
+            console.log(`[Chat Tab] Found ${selector}`);
+            return resolve(element);
         }
 
-        if (!window.isLoggedIn) {
-            window.showToast('Please log in to send messages!', 'info');
-            // Storing might be complex if user navigates away, simplify for now
-            // localStorage.setItem('pendingChatMessage', message);
-            // setTimeout(() => window.location.href = '/auth/google', 1000);
-            return;
-        }
-
-        if (message && input) {
-             // --- Clear area ONLY if it hasn't been cleared yet for this session ---
-             if (!window.isChatAreaClearedForSession) {
-                 console.log("[Chat Tab] First chat message in session, clearing content area.");
-                 contentArea.innerHTML = '';
-                 window.isChatAreaClearedForSession = true;
-             }
-             // --- End clear logic ---
-
-             // Generate a session ID if this is the first message in this tab instance
-             if (!currentChatSessionId) {
-                currentChatSessionId = `chat_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-                console.log('[Chat Tab] New Chat Session ID generated:', currentChatSessionId);
-                // Clear any old messages when starting a new session ID
-                if (contentArea) contentArea.innerHTML = '';
+        const observer = new MutationObserver(() => {
+            const el = document.querySelector(selector);
+            if (el) {
+                console.log(`[Chat Tab] ${selector} appeared in DOM`);
+                observer.disconnect();
+                resolve(el);
             }
+        });
 
-             // --- Re-enabled adding user message visually --- 
-             const userDiv = document.createElement('div');
-             userDiv.classList.add('chat-message', 'user');
-             // Basic text insertion, consider sanitizing if needed
-             userDiv.textContent = message; 
-             contentArea.appendChild(userDiv);
-             contentArea.scrollTop = contentArea.scrollHeight;
-             // --- End re-enabled code ---
+        observer.observe(document.body, { childList: true, subtree: true });
 
-            console.log("[Chat Tab] Sending message via WebSocket:", message);
-            window.sendChatMsg({ 
-                type: 'chat', 
-                message: message,
-                chatSessionId: currentChatSessionId // Include the session ID
-            }); // Use core.js function
-            input.value = '';
-        } else {
-            console.log("[Chat Tab] No message entered.");
-        }
+        setTimeout(() => {
+            observer.disconnect();
+            console.warn(`[Chat Tab] ${selector} not found after ${timeout}ms`);
+            reject(new Error(`${selector} not found`));
+        }, timeout);
     });
+};
 
-    // Existing WebSocket message handling should be in core.js, not duplicated here.
-    // Remove ws.onmessage handler from here if it exists in core.js
+async function reloadChatUI(activeTab = 'chat') {
+    console.log(`[Chat Tab] Reloading chat UI for tab: ${activeTab}`);
+    const chatTabContent = document.getElementById('chat-tab-content');
+    if (!chatTabContent) {
+        console.error('[Chat Tab] #chat-tab-content not found');
+        window.showToast('Chat tab content not found. Please refresh.', 'error');
+        return false;
+    }
+
+    try {
+        const response = await fetch('/partials/chat-tab');
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        const html = await response.text();
+        console.log('[Chat Tab] Fetched HTML for chat-tab:', html);
+        chatTabContent.innerHTML = html;
+        console.log('[Chat Tab] Chat tab HTML injected into #chat-tab-content');
+
+        const maxRetries = 5;
+        let chatSubmitButton = null;
+        for (let i = 0; i < maxRetries; i++) {
+            chatSubmitButton = await waitForElement('#chat-submit', 5000);
+            if (chatSubmitButton && chatSubmitButton.parentNode) {
+                console.log('[Chat Tab] #chat-submit found with parentNode on attempt', i + 1);
+                break;
+            }
+            console.warn('[Chat Tab] #chat-submit found but detached or not found, retrying...');
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        if (!chatSubmitButton || !chatSubmitButton.parentNode) {
+            console.error('[Chat Tab] ERROR: #chat-submit not found or detached after retries');
+            window.showToast('Chat UI error: Submit button not found or detached. Please refresh.', 'error');
+            return false;
+        }
+
+        const chatTalkContent = await waitForElement('#chat-talk', 5000);
+        console.log('[Chat Tab] #chat-talk after reload:', chatTalkContent);
+        console.log('[Chat Tab] #chat-submit after reload:', chatSubmitButton);
+        console.log('[Chat Tab] #chat-submit parentNode:', chatSubmitButton.parentNode);
+
+        const chatTabsContainer = document.querySelector('.chat-tabs');
+        const createImagesContent = document.getElementById('create-images-content');
+
+        if (chatTabsContainer && chatTalkContent && createImagesContent) {
+            const chatTab = chatTabsContainer.querySelector('.chat-tab[data-tab="chat"]');
+            const imagesTab = chatTabsContainer.querySelector('.chat-tab[data-tab="create-images"]');
+
+            chatTabsContainer.querySelectorAll('.chat-tab').forEach(t => t.classList.remove('active'));
+            chatTalkContent.classList.remove('active');
+            createImagesContent.classList.remove('active');
+
+            if (activeTab === 'chat') {
+                chatTab.classList.add('active');
+                chatTalkContent.classList.add('active');
+                chatTalkContent.style.display = 'flex';
+                createImagesContent.style.display = 'none';
+                console.log('[Chat Tab] Set chat tab active');
+                await new Promise(resolve => setTimeout(resolve, 100));
+                await setupChat();
+            } else if (activeTab === 'create-images') {
+                imagesTab.classList.add('active');
+                createImagesContent.classList.add('active');
+                createImagesContent.style.display = 'flex';
+                chatTalkContent.style.display = 'none';
+                console.log('[Chat Tab] Set create-images tab active');
+                if (typeof window.setupCreateTab === 'function') {
+                    await window.setupCreateTab();
+                }
+            }
+        } else {
+            console.warn('[Chat Tab] Missing elements:', {
+                chatTabs: !!chatTabsContainer,
+                chatTalk: !!chatTalkContent,
+                createImages: !!createImagesContent
+            });
+            window.showToast('Chat UI incomplete. Please refresh.', 'error');
+            return false;
+        }
+
+        return true;
+    } catch (error) {
+        console.error('[Chat Tab] Error reloading chat UI:', error);
+        window.showToast('Error loading chat UI. Please refresh.', 'error');
+        return false;
+    }
 }
 
-// Initialize tabs and potentially the default chat setup
-document.addEventListener('DOMContentLoaded', () => {
-    // Flag to track if the main chat area has been cleared for the current "session"
-    // A "session" resets when non-chat content is loaded into #chat-messages
-    window.isChatAreaClearedForSession = false;
+async function setupChat() {
+    console.log('--- [Chat Tab] ATTEMPTING setupChat (SUPER DEBUG MODE) ---');
 
-    console.log('[Chat Tab] DOMContentLoaded event.');
-    const chatTabsContainer = document.querySelector('.chat-tabs');
-    const chatTabContent = document.getElementById('chat-tab-content'); // Container for sub-content divs
-
-    if (!chatTabsContainer || !chatTabContent) {
-        console.error("[Chat Tab] Could not find .chat-tabs or #chat-tab-content");
-        return;
-    }
-
-    const chatTalkContent = document.getElementById('chat-talk');
-    const createImagesContent = document.getElementById('create-images-content');
-    // Add video content div reference if it exists
-    // const createVideosContent = document.getElementById('create-videos-content');
-
-    if (!chatTalkContent || !createImagesContent) {
-         console.error("[Chat Tab] Could not find #chat-talk or #create-images-content divs.");
-         return;
-    }
-
-    // Setup tab switching
-    chatTabsContainer.addEventListener('click', (event) => {
-        const clickedTab = event.target.closest('.chat-tab');
-        if (!clickedTab) return; // Ignore clicks that aren't on a tab
-
-        const tabName = clickedTab.dataset.tab;
-        console.log(`[Chat Tab] Tab clicked: ${tabName}`);
-
-        // Update active tab style
-        chatTabsContainer.querySelectorAll('.chat-tab').forEach(t => t.classList.remove('active'));
-        clickedTab.classList.add('active');
-
-        // --- Simplified Visibility Toggle --- 
-        // Deactivate all content areas first
-        chatTalkContent.classList.remove('active');
-        createImagesContent.classList.remove('active');
-        // if (createVideosContent) { createVideosContent.classList.remove('active'); }
-
-        // Activate the selected sub-content area
-        if (tabName === 'chat') {
-            chatTalkContent.classList.add('active');
-            // Don't explicitly clear here. Let the 'send' logic handle it if needed.
-            setupChat(); // Ensure chat listener is attached
-        } else if (tabName === 'create-images') {
-            createImagesContent.classList.add('active');
-             // Clear content and reset the flag, as we are leaving the chat flow
-             document.getElementById('chat-messages').innerHTML = ''; 
-             window.isChatAreaClearedForSession = false; // Reset flag
-        } else if (tabName === 'create-videos') {
-            // Handle video tab - maybe show a message
-            window.showToast('Video creation is not yet available.', 'info');
-             // Clear main content area - Keep this clear for unimplemented tabs
-             // Clear content and reset the flag
-             document.getElementById('chat-messages').innerHTML = ''; 
-             window.isChatAreaClearedForSession = false; // Reset flag
+    const tryWaitForElement = async (selector, timeout, retries = 5, delay = 1000) => {
+        for (let i = 0; i < retries; i++) {
+            try {
+                const element = await waitForElement(selector, timeout);
+                console.log(`--- [Chat Tab] Found ${selector} on attempt ${i + 1} ---`);
+                if (element.parentNode) {
+                    return element;
+                } else {
+                    console.warn(`--- [Chat Tab] ${selector} found but has no parentNode, retrying... ---`);
+                    if (i < retries - 1) await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            } catch (error) {
+                console.warn(`--- [Chat Tab] Retry ${i + 1}/${retries} for ${selector}:`, error);
+                if (i < retries - 1) await new Promise(resolve => setTimeout(resolve, delay));
+            }
         }
-        // --- End Simplified Visibility Toggle ---
-    });
+        throw new Error(`Failed to find ${selector} with a valid parentNode after ${retries} retries`);
+    };
 
-    // Initial setup: Ensure chat is set up if it's the default active tab
-    const initialActiveTab = chatTabsContainer.querySelector('.chat-tab.active');
-    if (initialActiveTab && initialActiveTab.dataset.tab === 'chat') {
-        console.log('[Chat Tab] Initializing chat setup.');
-        // Flag is initially false. First send click will clear if needed.
-        setupChat();
-    } else if (initialActiveTab && initialActiveTab.dataset.tab === 'create-images') {
-        // Pre-clear content area if starting on image tab
-        document.getElementById('chat-messages').innerHTML = ''; 
-        window.isChatAreaClearedForSession = false; // Ensure flag is false
-    } else {
-        // Default initial load (advert) - flag is already false.
+    try {
+        const chatTalkPanel = document.getElementById('chat-talk');
+        if (!chatTalkPanel) {
+            console.error('--- [Chat Tab] ERROR: #chat-talk panel not found ---');
+            throw new Error('#chat-talk panel not found');
+        }
+        console.log('--- [Chat Tab] #chat-talk panel found ---');
+
+        const chatSubmitButton = await tryWaitForElement('#chat-submit', 15000);
+        const chatInputField = await tryWaitForElement('#chat-talk-input', 15000);
+
+        console.log('--- [Chat Tab] SUCCESS: Found chat-submit button:', chatSubmitButton, '---');
+        console.log('--- [Chat Tab] SUCCESS: Found chat-talk-input field:', chatInputField, '---');
+
+        // Attach event listener directly to chatSubmitButton
+        console.log('--- [Chat Tab] ATTACHING CLICK LISTENER to #chat-submit ---');
+        chatSubmitButton.addEventListener('click', async () => {
+            console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+            console.log('--- [Chat Tab] CHAT SEND BUTTON CLICKED! HANDLER EXECUTED! ---');
+            console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+
+            const message = chatInputField.value.trim();
+
+            if (!message) {
+                console.log('--- [Chat Tab] No message entered. Aborting send. ---');
+                if (typeof window.showToast === 'function') {
+                    window.showToast('Please enter a message.', 'info');
+                }
+                return;
+            }
+
+            let messagesContainerForThisSend;
+            const mainContentHost = document.getElementById('content-area');
+
+            if (!mainContentHost) {
+                console.error('[Chat Tab] Send: Main #content-area not found.');
+                if (typeof window.showToast === 'function') {
+                    window.showToast('Chat UI error: Content area not found.', 'error');
+                }
+                chatInputField.value = message;
+                return;
+            }
+
+            if (window.hasAccessedSideMenu || !window.isContentAreaDisplayingNewSession) {
+                console.log('[Chat Tab] Send: Clearing main #content-area for new chat session.');
+                mainContentHost.innerHTML = '';
+                messagesContainerForThisSend = document.createElement('div');
+                messagesContainerForThisSend.id = 'chat-messages';
+                messagesContainerForThisSend.classList.add('flex-1', 'overflow-y-auto', 'pb-32');
+                mainContentHost.appendChild(messagesContainerForThisSend);
+                messagesContainerForThisSend.innerHTML = '<h3 class="chat-area-title text-lg font-semibold text-center py-2">New Chat Conversation</h3>';
+                window.currentChatSessionId = null;
+                window.isContentAreaDisplayingNewSession = true;
+                window.hasAccessedSideMenu = false;
+            } else {
+                messagesContainerForThisSend = document.getElementById('chat-messages');
+                if (!messagesContainerForThisSend) {
+                    console.warn('[Chat Tab] Send: #chat-messages not found. Recreating.');
+                    mainContentHost.innerHTML = '';
+                    messagesContainerForThisSend = document.createElement('div');
+                    messagesContainerForThisSend.id = 'chat-messages';
+                    messagesContainerForThisSend.classList.add('flex-1', 'overflow-y-auto', 'pb-32');
+                    mainContentHost.appendChild(messagesContainerForThisSend);
+                    messagesContainerForThisSend.innerHTML = '<h3 class="chat-area-title text-lg font-semibold text-center py-2">Chat</h3>';
+                }
+            }
+
+            if (!window.currentChatSessionId) {
+                window.currentChatSessionId = `chat_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+                console.log('[Chat Tab] New Chat Session ID:', window.currentChatSessionId);
+            }
+
+            const userDiv = document.createElement('div');
+            userDiv.classList.add('chat-message', 'user', 'bg-gray-800', 'p-3', 'rounded', 'mb-2', 'text-right');
+            userDiv.innerHTML = `<strong class="font-semibold">You:</strong><div class="message-content mt-1">${message.replace(/</g, "<").replace(/>/g, ">")}</div>`;
+
+            if (messagesContainerForThisSend) {
+                messagesContainerForThisSend.appendChild(userDiv);
+                messagesContainerForThisSend.scrollTop = messagesContainerForThisSend.scrollHeight;
+            } else {
+                console.error('[Chat Tab] Send: messagesContainerForThisSend is null.');
+                if (typeof window.showToast === 'function') {
+                    window.showToast('Chat UI error: Messages container not found.', 'error');
+                }
+            }
+
+            console.log('[Chat Tab] Sending message via WebSocket:', message);
+            if (typeof window.sendChatMsg === 'function') {
+                window.sendChatMsg({
+                    type: 'chat',
+                    message: message,
+                    chatSessionId: window.currentChatSessionId,
+                    mode: 'chat-talk'
+                });
+            } else {
+                console.error('--- [Chat Tab] ERROR: window.sendChatMsg is NOT a function! ---');
+                if (typeof window.showToast === 'function') {
+                    window.showToast('Chat system error: Unable to send message.', 'error');
+                }
+            }
+
+            chatInputField.value = '';
+            if (chatInputField.tagName === 'TEXTAREA') {
+                autoResizeTextarea(chatInputField);
+            }
+        });
+
+        if (chatInputField && chatInputField.tagName === 'TEXTAREA') {
+            chatInputField.addEventListener('input', () => autoResizeTextarea(chatInputField));
+            autoResizeTextarea(chatInputField);
+            console.log('--- [Chat Tab] Textarea listener attached. ---');
+        }
+
+        console.log('--- [Chat Tab] setupChat (SUPER DEBUG MODE) finished. ---');
+    } catch (error) {
+        console.error('--- [Chat Tab] ERROR in setupChat:', error, '---');
+        if (typeof window.showToast === 'function') {
+            window.showToast('Failed to initialize chat. Please refresh.', 'error');
+        }
+        throw error;
     }
+}
+
+
+document.addEventListener('DOMContentLoaded', async () => {
+  console.log('--- [Chat Tab] DOMContentLoaded event fired ---');
+
+  const trySetupChat = async (retries = 5, delay = 1000) => {
+    for (let i = 0; i < retries; i++) {
+      if (document.querySelector('#chat-talk')) {
+        console.log('--- [Chat Tab] #chat-talk found on load, running setupChat ---');
+        try {
+          await setupChat();
+          return;
+        } catch (error) {
+          console.error('--- [Chat Tab] setupChat failed, retrying...', error);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      } else {
+        console.log('--- [Chat Tab] #chat-talk not found on load, retrying...');
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    console.warn('--- [Chat Tab] Gave up on setupChat after retries ---');
+    window.showToast('Chat panel not found. Please refresh.', 'error');
+  };
+
+  await trySetupChat();
+
+  const chatTabsContainer = document.querySelector('.chat-tabs');
+  if (chatTabsContainer) {
+    chatTabsContainer.addEventListener('click', async (event) => {
+      const clickedTab = event.target.closest('.chat-tab');
+      if (!clickedTab) return;
+
+      const tabName = clickedTab.dataset.tab;
+      console.log(`--- [Chat Tab] Tab clicked: ${tabName} ---`);
+
+      if (window.isLoadingChatTab) {
+        console.log('--- [Chat Tab] loadChatTab is already in progress. Ignoring click. ---');
+        return;
+      }
+
+      if (typeof window.loadChatTab !== 'function') {
+        console.error('--- [Chat Tab] ERROR: window.loadChatTab is not defined! ---');
+        if (typeof window.showToast === 'function') {
+          window.showToast('UI loading function missing. Please refresh.', 'error');
+        }
+        return;
+      }
+
+      window.isLoadingChatTab = true;
+      try {
+        if (tabName === 'chat') {
+          await window.loadChatTab('chat', 'chat-talk');
+          console.log('--- [Chat Tab] Running setupChat for chat tab ---');
+          await trySetupChat();
+        } else if (tabName === 'create-images') {
+          await window.loadChatTab('create-image', 'create-images');
+        } else if (tabName === 'create-videos') {
+          if (typeof window.showToast === 'function') {
+            window.showToast('Video creation is not yet available.', 'info');
+          }
+          await window.loadChatTab('create-image', 'create-images');
+        }
+      } catch (error) {
+        console.error(`--- [Chat Tab] Error during loadChatTab for tab ${tabName}:`, error);
+        if (typeof window.showToast === 'function') {
+          window.showToast('Error switching tabs. Please refresh.', 'error');
+        }
+      } finally {
+        window.isLoadingChatTab = false;
+      }
+    });
+    console.log('--- [Chat Tab] Tab click listener attached to .chat-tabs ---');
+  } else {
+    console.error('--- [Chat Tab] ERROR: .chat-tabs container not found ---');
+    if (typeof window.showToast === 'function') {
+      window.showToast('Tab container not found. Please refresh.', 'error');
+    }
+  }
+
+  console.log('--- [Chat Tab] DOMContentLoaded finished ---');
 });

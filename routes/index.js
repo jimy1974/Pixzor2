@@ -270,23 +270,24 @@ router.get('/partials/modals', (req, res) => {
 });
 
 router.get('/chat-tab/:tab', (req, res) => {
-    const { tab } = req.params;
-    const validTabs = ['chat', 'create-images', 'create-videos']; 
-    if (!validTabs.includes(tab)) {
-        return res.status(404).send('Tab not found');
-    }
-    try {
-        // Pass user and runware models to the create-images tab partial
-        const viewData = {
-            layout: false, 
-            user: req.user,
-            runwareModels: RUNWARE_MODELS // Pass models for the dropdown
-        };
-        res.render(`partials/${tab}`, viewData); 
-    } catch (err) {
-        console.error(`Error rendering partial for tab ${tab}:`, err);
-        res.status(500).send('Error loading tab content.');
-    }
+  const { tab } = req.params;
+  const validTabs = ['chat', 'create-images', 'create-videos'];
+  if (!validTabs.includes(tab)) {
+    return res.status(404).send('Tab not found');
+  }
+  try {
+    const activeTab = tab === 'chat' ? 'chat-talk' : tab;
+    const viewData = {
+      layout: false,
+      user: req.user,
+      runwareModels: RUNWARE_MODELS,
+      activeTab
+    };
+    res.render(`partials/chat-tab`, viewData); // Always render chat-tab.ejs
+  } catch (err) {
+    console.error(`Error rendering partial for tab ${tab}:`, err);
+    res.status(500).send('Error loading tab content.');
+  }
 });
 
 router.get('/user-data', (req, res) => {

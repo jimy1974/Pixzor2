@@ -19,12 +19,16 @@
     <meta name="csrf-token" content="<%= csrfToken %>">
     <script>
         window.isLoggedIn = <%= isLoggedIn ? 'true' : 'false' %>;
-        window.currentUser = <%= user ? JSON.stringify(user) : 'null' %>;
+        window.currentUser = <%- user ? JSON.stringify(user) : 'null' %>;
         window.RUNWARE_MODELS = <%- JSON.stringify(runwareModels || {}) %>;
         window.PROMPT_BASED_STYLES = <%- JSON.stringify(promptBasedStyles || []) %>;
         window.ORIGINAL_STYLES = <%- JSON.stringify(promptBasedStyles || []) %>;
+        // NEW GLOBAL FLAGS FOR CONTENT AREA MANAGEMENT
+        window.hasAccessedSideMenu = false; // True if a sidebar item was clicked
+        window.isContentAreaDisplayingNewSession = false; // True if #chat-messages is showing "New Chat" or "New Image Gen"
+        window.currentChatSessionId = null; // Track current chat session ID
     </script>
-    <script src="https://kit.fontawesome.com/your-kit.js"></script>
+    <!-- Removed problematic Font Awesome kit link, relying on CDN CSS for icons -->
     <script src="https://js.stripe.com/v3/"></script>
     <!-- Include imagesLoaded and Masonry via CDN -->
     <script src="https://unpkg.com/imagesloaded@5/imagesloaded.pkgd.min.js"></script>
@@ -622,6 +626,17 @@
     .message-content p:not(:last-child) {
         margin-bottom: 0.75rem;
     }
+
+    /* NEW: Styles for the content area titles */
+    .chat-area-title, .image-area-title {
+         font-size: 1.125rem; /* text-lg */
+         font-weight: 600; /* font-semibold */
+         color: #ffffff; /* text-white */
+         margin-bottom: 0.75rem; /* mb-3 */
+         border-bottom: 1px solid #4b5563; /* border-b border-gray-600 */
+         padding-bottom: 0.5rem; /* pb-2 */
+         width: 100%; /* Ensure it spans the width */
+     }
 </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -832,9 +847,9 @@
     
     <script src="/js/gallery.js" defer></script>
     <script src="/js/core.js"></script>
-    <% if (locals.includeChat) { %>
-        <script src="/js/chat-tab.js"></script>
-    <% } %>
+    
+    <script src="/js/chat-tab.js"></script>
+        
     <script src="/js/create-tab.js" defer></script>
     <!-- Load Gallery Script -->
     

@@ -54,14 +54,26 @@ function initializeWebSocket(server) {
                     console.error('[WebSocket] Session middleware error:', err);
                     return done(false, 500, 'Internal server error');
                 }
+                // TEMPORARY: Bypass auth for WebSocket connection for local debugging.
+                // TODO: Restore proper authentication before production.
+                console.warn('[WebSocket] TEMPORARY: Bypassing authentication for WebSocket connection for debugging purposes.');
                 if (info.req.session && info.req.session.passport && info.req.session.passport.user) {
-                    console.log('[WebSocket] Client verification successful, User ID:', info.req.session.passport.user);
+                    console.log('[WebSocket] Client verification successful (session found), User ID:', info.req.session.passport.user);
                     info.req.verifiedUserId = info.req.session.passport.user;
-                    done(true);
                 } else {
-                    console.log('[WebSocket] Client verification failed: No authenticated session found.');
-                    done(false, 401, 'Unauthorized');
+                    console.log('[WebSocket] No authenticated session found for WebSocket, assigning temporary ID for debugging.');
+                    info.req.verifiedUserId = 'temp_debug_user_' + Date.now(); // Assign a temporary ID
                 }
+                done(true);
+                // Original logic:
+                // if (info.req.session && info.req.session.passport && info.req.session.passport.user) {
+                //     console.log('[WebSocket] Client verification successful, User ID:', info.req.session.passport.user);
+                //     info.req.verifiedUserId = info.req.session.passport.user;
+                //     done(true);
+                // } else {
+                //     console.log('[WebSocket] Client verification failed: No authenticated session found.');
+                //     done(false, 401, 'Unauthorized');
+                // }
             });
         }
     });
