@@ -66,15 +66,16 @@
 
             <!-- Model Select (Pixzor Styled & Naming) -->
             <div class="relative inline-block text-left">
-                <%# ** CORRECTED MODEL LIST BELOW ** %>
+                
+                
+                <!-- views/partials/chat-tab.ejs -->
                 <select id="image-model-select" name="model" class="appearance-none bg-gray-700 border border-gray-600 text-gray-300 py-1 pl-2 pr-7 rounded text-xs focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500" title="Select Model">
-                    <%# Format: Model Name %>
-                    <%# Value is Runware ID, data-cost is *actual* Runware cost %>
-                    <option value="runware:100@1" data-cost="0.0065" selected>Model: Flux Schnell</option> <%# Scaled cost: 0.0013*5=0.0065, rounded to 0.01 %>
-                    <option value="runware:101@1" data-cost="0.016">Model: Flux Dev</option> <%# Scaled cost: 0.0032*5=0.016, rounded to 0.02 %>
-                    <option value="rundiffusion:130@100" data-cost="0.016">Model: Juggernaut Pro</option> <%# Scaled cost: 0.0032*5=0.016, rounded to 0.02 %>
-                    <option value="civitai:133005@782002" data-cost="0.0065">Face / Character</option> <%# Scaled cost: 0.0013*5=0.0065, rounded to 0.01 %>
+                    <option value="runware:100@1" data-cost="0.0065" selected>Model: Flux Schnell</option>
+                    <option value="runware:101@1" data-cost="0.0160">Model: Flux Dev</option>
+                    <option value="rundiffusion:130@100" data-cost="0.0160">Model: Juggernaut Pro</option>
+                    <option value="civitai:133005@782002" data-cost="0.0065">Face / Character</option>
                 </select>
+                
                 <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 text-gray-400">
                     <svg class="fill-current h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                         <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
@@ -174,51 +175,23 @@
 }
 </style>
 
+<!-- views/partials/chat-tab.ejs -->
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const imageUploadInput = document.getElementById('image-upload-input');
     const thumbnail = document.getElementById('image-thumbnail-preview');
     const clearButton = document.getElementById('clear-image-upload');
-    const thumbnailContainer = document.getElementById('thumbnail-container'); 
-    const placeholderIcon = document.getElementById('thumbnail-placeholder-icon'); 
-    
-    // NEW elements
-    const modelSelect = document.getElementById('image-model-select');
-    const styleSelect = document.getElementById('image-style-select'); 
-    const enhanceButton = document.getElementById('enhance-prompt-button'); 
-    const generateButton = document.getElementById('image-generate-button'); 
-    const tokenCostDisplay = document.getElementById('image-token-cost-display'); 
-    
-    // Dropdown elements
+    const placeholderIcon = document.getElementById('thumbnail-placeholder-icon');
     const dropdown = document.getElementById('aspect-ratio-dropdown');
     const optionsContainer = document.getElementById('aspect-ratio-options');
     const selectedIconSpan = document.getElementById('selected-ratio-icon');
-    const selectedRatioTextSpan = document.getElementById('selected-ratio-text'); 
-
-    // --- Helper Function --- 
-    function updateGenerateButtonCost() {
-        const selectedModelOption = modelSelect.options[modelSelect.selectedIndex];
-        const cost = selectedModelOption.dataset.cost || '1';
-        tokenCostDisplay.textContent = `(${cost})`;
-    }
-
-    // --- End Helper Functions ---
-
-    // --- Initial Setup ---
-    updateGenerateButtonCost();
-    // --- End Initial Setup ---
-
-    // --- Event Listeners ---
-
-    // Model Change Listener
-    if (modelSelect) {
-        modelSelect.addEventListener('change', () => {
-            updateGenerateButtonCost();
-        });
-    }
+    const selectedRatioTextSpan = document.getElementById('selected-ratio-text');
+    const enhanceButton = document.getElementById('enhance-prompt-button');
+    const strengthSlider = document.getElementById('image-strength-slider');
+    const strengthValueDisplay = document.getElementById('image-strength-value-display');
 
     // Image Upload Listener
-    if (imageUploadInput && thumbnail && clearButton && placeholderIcon && generateButton) { 
+    if (imageUploadInput && thumbnail && clearButton && placeholderIcon) {
         imageUploadInput.addEventListener('change', function(event) {
             const file = event.target.files[0];
             if (file && file.type.startsWith('image/')) {
@@ -227,70 +200,54 @@ document.addEventListener('DOMContentLoaded', () => {
                     thumbnail.src = e.target.result;
                     thumbnail.classList.remove('hidden');
                     placeholderIcon.classList.add('hidden');
-                }
+                    clearButton.classList.remove('hidden');
+                };
                 reader.readAsDataURL(file);
             } else {
-                thumbnail.src = '/images/placeholder.png'; 
-                imageUploadInput.value = ''; 
+                thumbnail.src = '#';
+                imageUploadInput.value = '';
                 thumbnail.classList.add('hidden');
                 placeholderIcon.classList.remove('hidden');
+                clearButton.classList.add('hidden');
             }
         });
 
-        // Clear Button Listener
         clearButton.addEventListener('click', () => {
-            thumbnail.src = '/images/placeholder.png'; 
-            imageUploadInput.value = '';           
+            thumbnail.src = '#';
+            imageUploadInput.value = '';
             thumbnail.classList.add('hidden');
             placeholderIcon.classList.remove('hidden');
+            clearButton.classList.add('hidden');
         });
     }
 
     // Aspect Ratio Dropdown Logic
     if (dropdown && optionsContainer && selectedIconSpan && selectedRatioTextSpan) {
-        // Toggle dropdown visibility
         dropdown.addEventListener('click', () => {
             if (dropdown.disabled) {
                 console.log('[AspectRatio Click] Ignored (Button disabled)');
                 return;
             }
-            console.log('[AspectRatio Click] Fired. Options hidden before toggle:', optionsContainer.classList.contains('hidden'));
             optionsContainer.classList.toggle('hidden');
         });
 
-        // Handle option selection
         optionsContainer.addEventListener('click', (event) => {
             const optionLink = event.target.closest('.aspect-ratio-option');
             if (optionLink) {
-                event.preventDefault(); 
+                event.preventDefault();
                 const newValue = optionLink.dataset.value;
-                const newIconHTML = optionLink.querySelector('i').outerHTML; 
-                const newText = optionLink.textContent.trim(); 
+                const newIconHTML = optionLink.querySelector('i').outerHTML;
+                const newText = optionLink.textContent.trim().split(' ')[1] || newValue;
 
-                // Update the main dropdown button
-                dropdown.dataset.value = newValue; 
+                dropdown.dataset.value = newValue;
                 selectedIconSpan.innerHTML = newIconHTML;
-                selectedRatioTextSpan.textContent = newText; 
-                
-                // Hide the selected option, show others in the list
-                const allOptions = optionsContainer.querySelectorAll('.aspect-ratio-option');
-                allOptions.forEach(opt => {
-                    if (opt.dataset.value === newValue) {
-                        opt.classList.add('hidden');
-                    } else {
-                        opt.classList.remove('hidden');
-                    }
-                });
-+
-                // Hide the options container
+                selectedRatioTextSpan.textContent = newText;
                 optionsContainer.classList.add('hidden');
 
-                // Log selection (for create-tab.js reference)
                 console.log('Selected Ratio (Dropdown):', newValue);
             }
         });
 
-        // Optional: Close dropdown when clicking outside
         document.addEventListener('click', (event) => {
             if (!dropdown.contains(event.target) && !optionsContainer.contains(event.target)) {
                 optionsContainer.classList.add('hidden');
@@ -298,51 +255,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Enhance Button Listener (Example)
+    // Enhance Button Listener
     if (enhanceButton) {
         enhanceButton.addEventListener('click', () => {
-            // Placeholder for enhance functionality - maybe call an API?
             console.log('Enhance button clicked!');
             window.showToast('Enhance functionality not yet implemented.', 'info');
         });
     }
 
-    // NEW: Strength Slider Update
-    const strengthSlider = document.getElementById('image-strength-slider');
-    const strengthValueDisplay = document.getElementById('image-strength-value-display');
-    if(strengthSlider && strengthValueDisplay) {
+    // Strength Slider Update
+    if (strengthSlider && strengthValueDisplay) {
         strengthSlider.addEventListener('input', () => {
-            strengthValueDisplay.textContent = strengthSlider.value;
+            strengthValueDisplay.textContent = parseFloat(strengthSlider.value).toFixed(2);
         });
     }
-
-    // Function to update Generate button state and Strength visibility
-    function updateControlsBasedOnState() {
-        const modelValue = modelSelect.value;
-        const isSchnellModel = modelValue === 'runware:100@1';
-        const hasUploadedImage = uploadedImageData !== null;
-        const hasPrompt = imageInput.value.trim().length > 0;
-
-        // Show strength slider only if an image is uploaded AND model supports img2img
-        if (hasUploadedImage && !isSchnellModel) {
-            strengthControl.classList.remove('hidden');
-        } else {
-            strengthControl.classList.add('hidden');
-        }
-
-        // Generate button disabled logic:
-        if (isSchnellModel) {
-            // For Schnell (text-to-image): Disable if no prompt
-            generateButton.disabled = !hasPrompt;
-        } else {
-            // For other models (image-to-image): Disable if no prompt OR no image
-            generateButton.disabled = !hasPrompt || !hasUploadedImage;
-        }
-        console.log(`[UpdateControls] Model: ${modelValue}, IsSchnell: ${isSchnellModel}, HasImage: ${hasUploadedImage}, HasPrompt: ${hasPrompt}, Generate Disabled: ${generateButton.disabled}`);
-    }
-
-    imageUploadInput.addEventListener('change', async () => {
-        // ... rest of the code remains the same ...
-    });
 });
 </script>

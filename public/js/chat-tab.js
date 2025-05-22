@@ -1,17 +1,17 @@
-console.log('chat-tab.js: Script loaded.');
+debugLog('chat-tab.js: Script loaded.');
 
 const waitForElement = (selector, timeout = 5000) => {
     return new Promise((resolve, reject) => {
         const element = document.querySelector(selector);
         if (element) {
-            console.log(`[Chat Tab] Found ${selector}`);
+            debugLog(`[Chat Tab] Found ${selector}`);
             return resolve(element);
         }
 
         const observer = new MutationObserver(() => {
             const el = document.querySelector(selector);
             if (el) {
-                console.log(`[Chat Tab] ${selector} appeared in DOM`);
+                debugLog(`[Chat Tab] ${selector} appeared in DOM`);
                 observer.disconnect();
                 resolve(el);
             }
@@ -28,7 +28,7 @@ const waitForElement = (selector, timeout = 5000) => {
 };
 
 async function reloadChatUI(activeTab = 'chat') {
-    console.log(`[Chat Tab] Reloading chat UI for tab: ${activeTab}`);
+    debugLog(`[Chat Tab] Reloading chat UI for tab: ${activeTab}`);
     const chatTabContent = document.getElementById('chat-tab-content');
     if (!chatTabContent) {
         console.error('[Chat Tab] #chat-tab-content not found');
@@ -42,16 +42,16 @@ async function reloadChatUI(activeTab = 'chat') {
             throw new Error(`HTTP error! Status: ${response.status}`);
         }
         const html = await response.text();
-        console.log('[Chat Tab] Fetched HTML for chat-tab:', html);
+        debugLog('[Chat Tab] Fetched HTML for chat-tab:', html);
         chatTabContent.innerHTML = html;
-        console.log('[Chat Tab] Chat tab HTML injected into #chat-tab-content');
+        debugLog('[Chat Tab] Chat tab HTML injected into #chat-tab-content');
 
         const maxRetries = 5;
         let chatSubmitButton = null;
         for (let i = 0; i < maxRetries; i++) {
             chatSubmitButton = await waitForElement('#chat-submit', 5000);
             if (chatSubmitButton && chatSubmitButton.parentNode) {
-                console.log('[Chat Tab] #chat-submit found with parentNode on attempt', i + 1);
+                debugLog('[Chat Tab] #chat-submit found with parentNode on attempt', i + 1);
                 break;
             }
             console.warn('[Chat Tab] #chat-submit found but detached or not found, retrying...');
@@ -65,9 +65,9 @@ async function reloadChatUI(activeTab = 'chat') {
         }
 
         const chatTalkContent = await waitForElement('#chat-talk', 5000);
-        console.log('[Chat Tab] #chat-talk after reload:', chatTalkContent);
-        console.log('[Chat Tab] #chat-submit after reload:', chatSubmitButton);
-        console.log('[Chat Tab] #chat-submit parentNode:', chatSubmitButton.parentNode);
+        debugLog('[Chat Tab] #chat-talk after reload:', chatTalkContent);
+        debugLog('[Chat Tab] #chat-submit after reload:', chatSubmitButton);
+        debugLog('[Chat Tab] #chat-submit parentNode:', chatSubmitButton.parentNode);
 
         const chatTabsContainer = document.querySelector('.chat-tabs');
         const createImagesContent = document.getElementById('create-images-content');
@@ -85,7 +85,7 @@ async function reloadChatUI(activeTab = 'chat') {
                 chatTalkContent.classList.add('active');
                 chatTalkContent.style.display = 'flex';
                 createImagesContent.style.display = 'none';
-                console.log('[Chat Tab] Set chat tab active');
+                debugLog('[Chat Tab] Set chat tab active');
                 await new Promise(resolve => setTimeout(resolve, 100));
                 await setupChat();
             } else if (activeTab === 'create-images') {
@@ -93,7 +93,7 @@ async function reloadChatUI(activeTab = 'chat') {
                 createImagesContent.classList.add('active');
                 createImagesContent.style.display = 'flex';
                 chatTalkContent.style.display = 'none';
-                console.log('[Chat Tab] Set create-images tab active');
+                debugLog('[Chat Tab] Set create-images tab active');
                 if (typeof window.setupCreateTab === 'function') {
                     await window.setupCreateTab();
                 }
@@ -117,13 +117,13 @@ async function reloadChatUI(activeTab = 'chat') {
 }
 
 async function setupChat() {
-    console.log('--- [Chat Tab] ATTEMPTING setupChat (SUPER DEBUG MODE) ---');
+    debugLog('--- [Chat Tab] ATTEMPTING setupChat (SUPER DEBUG MODE) ---');
 
     const tryWaitForElement = async (selector, timeout, retries = 5, delay = 1000) => {
         for (let i = 0; i < retries; i++) {
             try {
                 const element = await waitForElement(selector, timeout);
-                console.log(`--- [Chat Tab] Found ${selector} on attempt ${i + 1} ---`);
+                debugLog(`--- [Chat Tab] Found ${selector} on attempt ${i + 1} ---`);
                 if (element.parentNode) {
                     return element;
                 } else {
@@ -144,25 +144,25 @@ async function setupChat() {
             console.error('--- [Chat Tab] ERROR: #chat-talk panel not found ---');
             throw new Error('#chat-talk panel not found');
         }
-        console.log('--- [Chat Tab] #chat-talk panel found ---');
+        debugLog('--- [Chat Tab] #chat-talk panel found ---');
 
         const chatSubmitButton = await tryWaitForElement('#chat-submit', 15000);
         const chatInputField = await tryWaitForElement('#chat-talk-input', 15000);
 
-        console.log('--- [Chat Tab] SUCCESS: Found chat-submit button:', chatSubmitButton, '---');
-        console.log('--- [Chat Tab] SUCCESS: Found chat-talk-input field:', chatInputField, '---');
+        debugLog('--- [Chat Tab] SUCCESS: Found chat-submit button:', chatSubmitButton, '---');
+        debugLog('--- [Chat Tab] SUCCESS: Found chat-talk-input field:', chatInputField, '---');
 
         // Attach event listener directly to chatSubmitButton
-        console.log('--- [Chat Tab] ATTACHING CLICK LISTENER to #chat-submit ---');
+        debugLog('--- [Chat Tab] ATTACHING CLICK LISTENER to #chat-submit ---');
         chatSubmitButton.addEventListener('click', async () => {
-            console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-            console.log('--- [Chat Tab] CHAT SEND BUTTON CLICKED! HANDLER EXECUTED! ---');
-            console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+            debugLog('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+            debugLog('--- [Chat Tab] CHAT SEND BUTTON CLICKED! HANDLER EXECUTED! ---');
+            debugLog('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
 
             const message = chatInputField.value.trim();
 
             if (!message) {
-                console.log('--- [Chat Tab] No message entered. Aborting send. ---');
+                debugLog('--- [Chat Tab] No message entered. Aborting send. ---');
                 if (typeof window.showToast === 'function') {
                     window.showToast('Please enter a message.', 'info');
                 }
@@ -182,7 +182,7 @@ async function setupChat() {
             }
 
             if (window.hasAccessedSideMenu || !window.isContentAreaDisplayingNewSession) {
-                console.log('[Chat Tab] Send: Clearing main #content-area for new chat session.');
+                debugLog('[Chat Tab] Send: Clearing main #content-area for new chat session.');
                 mainContentHost.innerHTML = '';
                 messagesContainerForThisSend = document.createElement('div');
                 messagesContainerForThisSend.id = 'chat-messages';
@@ -207,7 +207,7 @@ async function setupChat() {
 
             if (!window.currentChatSessionId) {
                 window.currentChatSessionId = `chat_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-                console.log('[Chat Tab] New Chat Session ID:', window.currentChatSessionId);
+                debugLog('[Chat Tab] New Chat Session ID:', window.currentChatSessionId);
             }
 
             const userDiv = document.createElement('div');
@@ -224,7 +224,7 @@ async function setupChat() {
                 }
             }
 
-            console.log('[Chat Tab] Sending message via WebSocket:', message);
+            debugLog('[Chat Tab] Sending message via WebSocket:', message);
             if (typeof window.sendChatMsg === 'function') {
                 window.sendChatMsg({
                     type: 'chat',
@@ -248,10 +248,10 @@ async function setupChat() {
         if (chatInputField && chatInputField.tagName === 'TEXTAREA') {
             chatInputField.addEventListener('input', () => autoResizeTextarea(chatInputField));
             autoResizeTextarea(chatInputField);
-            console.log('--- [Chat Tab] Textarea listener attached. ---');
+            debugLog('--- [Chat Tab] Textarea listener attached. ---');
         }
 
-        console.log('--- [Chat Tab] setupChat (SUPER DEBUG MODE) finished. ---');
+        debugLog('--- [Chat Tab] setupChat (SUPER DEBUG MODE) finished. ---');
     } catch (error) {
         console.error('--- [Chat Tab] ERROR in setupChat:', error, '---');
         if (typeof window.showToast === 'function') {
@@ -263,12 +263,12 @@ async function setupChat() {
 
 
 document.addEventListener('DOMContentLoaded', async () => {
-  console.log('--- [Chat Tab] DOMContentLoaded event fired ---');
+  debugLog('--- [Chat Tab] DOMContentLoaded event fired ---');
 
   const trySetupChat = async (retries = 5, delay = 1000) => {
     for (let i = 0; i < retries; i++) {
       if (document.querySelector('#chat-talk')) {
-        console.log('--- [Chat Tab] #chat-talk found on load, running setupChat ---');
+        debugLog('--- [Chat Tab] #chat-talk found on load, running setupChat ---');
         try {
           await setupChat();
           return;
@@ -277,7 +277,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       } else {
-        console.log('--- [Chat Tab] #chat-talk not found on load, retrying...');
+        debugLog('--- [Chat Tab] #chat-talk not found on load, retrying...');
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
@@ -294,10 +294,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (!clickedTab) return;
 
       const tabName = clickedTab.dataset.tab;
-      console.log(`--- [Chat Tab] Tab clicked: ${tabName} ---`);
+      debugLog(`--- [Chat Tab] Tab clicked: ${tabName} ---`);
 
       if (window.isLoadingChatTab) {
-        console.log('--- [Chat Tab] loadChatTab is already in progress. Ignoring click. ---');
+        debugLog('--- [Chat Tab] loadChatTab is already in progress. Ignoring click. ---');
         return;
       }
 
@@ -313,7 +313,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         if (tabName === 'chat') {
           await window.loadChatTab('chat', 'chat-talk');
-          console.log('--- [Chat Tab] Running setupChat for chat tab ---');
+          debugLog('--- [Chat Tab] Running setupChat for chat tab ---');
           await trySetupChat();
         } else if (tabName === 'create-images') {
           await window.loadChatTab('create-image', 'create-images');
@@ -332,7 +332,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.isLoadingChatTab = false;
       }
     });
-    console.log('--- [Chat Tab] Tab click listener attached to .chat-tabs ---');
+    debugLog('--- [Chat Tab] Tab click listener attached to .chat-tabs ---');
   } else {
     console.error('--- [Chat Tab] ERROR: .chat-tabs container not found ---');
     if (typeof window.showToast === 'function') {
@@ -340,5 +340,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  console.log('--- [Chat Tab] DOMContentLoaded finished ---');
+  debugLog('--- [Chat Tab] DOMContentLoaded finished ---');
 });

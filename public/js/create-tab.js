@@ -1,4 +1,5 @@
-console.log('create-tab.js script tag executed');
+// public/js/create-tab.js
+debugLog('create-tab.js script tag executed');
 
 // --- Global State Variables ---
 let uploadedFileObject = null;
@@ -67,36 +68,251 @@ function autoResizeTextarea(textarea) {
 
 // --- Utility Function: Update Cost Display ---
 function updateCostDisplay() {
+    const modelSelect = document.getElementById('image-model-select');
+    const imageCostDisplay = document.getElementById('image-token-cost-display');
+    
     if (!modelSelect || !imageCostDisplay) {
         console.warn('[Create Tab] updateCostDisplay: modelSelect or imageCostDisplay not found.');
         return;
     }
-    const modelId = modelSelect.value;
-    const models = window.RUNWARE_MODELS || {};
-    const modelConfig = models[modelId];
-    let cost = 0;
-    const hasUploadedImage = uploadedFileObject !== null;
 
-    if (modelConfig) {
-        if (hasUploadedImage && modelConfig.userPriceI2I !== undefined) cost = modelConfig.userPriceI2I;
-        else if (!hasUploadedImage && modelConfig.userPriceT2I !== undefined) cost = modelConfig.userPriceT2I;
-        else if (modelConfig.userPrice !== undefined) cost = modelConfig.userPrice;
-        else { 
-            const selectedOption = modelSelect.options[modelSelect.selectedIndex];
-            if (selectedOption && selectedOption.dataset.cost) cost = parseFloat(selectedOption.dataset.cost) || 0;
-            else console.warn(`[Cost Update] No price info for model ${modelId} in RUNWARE_MODELS or data-cost.`);
-        }
-    } else { 
-        const selectedOption = modelSelect.options[modelSelect.selectedIndex];
-        if (selectedOption && selectedOption.dataset.cost) cost = parseFloat(selectedOption.dataset.cost) || 0;
-        else console.warn(`[Cost Update] Model ${modelId} not found in RUNWARE_MODELS and no data-cost attribute.`);
-    }
+    const selectedOption = modelSelect.options[modelSelect.selectedIndex];
+    let cost = parseFloat(selectedOption.dataset.cost) || 0;
+    
+    debugLog(`[Cost Update] Model: ${selectedOption.value}, Cost: ${cost}`);
     imageCostDisplay.textContent = `($${cost.toFixed(4)})`;
+}
+
+// --- Helper function to update control states (e.g., disabled/enabled) ---
+function updateControlsBasedOnState() {
+    const currentImageSubmit = document.getElementById('image-generate-button'); 
+    if (!modelSelect || !imagePrompt || !strengthControl || !currentImageSubmit || !aspectRatioButton) {
+        if(currentImageSubmit) currentImageSubmit.disabled = true; 
+        return;
+    }
+    const modelValue = modelSelect.value;
+    const models = window.RUNWARE_MODELS || {};
+    const selectedModelConfig = models[modelValue] || null;
+    const isImg2ImgCapable = selectedModelConfig ? selectedModelConfig.type !== 'text-to-image' : false;
+    const hasUploadedImage = uploadedFileObject !== null;
+    const hasPromptValue = imagePrompt.value.trim().length > 0;
+
+    strengthControl.classList.toggle('hidden', !(hasUploadedImage && isImg2ImgCapable));
+    let disableGenerate = false;
+    if (!isImg2ImgCapable) disableGenerate = !hasPromptValue;
+    else disableGenerate = !hasPromptValue || !hasUploadedImage;
+    currentImageSubmit.disabled = disableGenerate;
+
+    const photoMakerModelId = 'civitai:133005@782002';
+    const disableAspectRatio = hasUploadedImage && modelValue !== photoMakerModelId;
+    if(aspectRatioButton) { 
+        aspectRatioButton.disabled = disableAspectRatio;
+        aspectRatioButton.classList.toggle('opacity-50', disableAspectRatio);
+        aspectRatioButton.classList.toggle('cursor-not-allowed', disableAspectRatio);
+        if (disableAspectRatio) aspectRatioButton.title = "Aspect ratio is determined by the uploaded image";
+        else if (hasUploadedImage && modelValue === photoMakerModelId) aspectRatioButton.title = "Select Aspect Ratio (May be overridden by Face model)";
+        else aspectRatioButton.title = "Select Aspect Ratio";
+    }
+}
+
+// --- Helper function to update style dropdown based on selected model ---
+function updateStyleDropdown() {
+    if (!styleSelectElement || !modelSelect) return;
+    const modelId = modelSelect.value; styleSelectElement.innerHTML = '';
+    const modelConfig = window.RUNWARE_MODELS ? window.RUNWARE_MODELS[modelId] : null;
+    
+    const noneOption = document.createElement('option');
+    noneOption.value = '';
+    noneOption.textContent = 'Style: None'; // Clearer "None" option
+    styleSelectElement.appendChild(noneOption);
+
+    if (modelConfig && modelConfig.usesPromptBasedStyling && window.PROMPT_BASED_STYLES && window.PROMPT_BASED_STYLES.length > 0) {
+        window.PROMPT_BASED_STYLES.forEach(style => {
+            const option = document.createElement('option'); option.value = style.value; option.textContent = style.name; styleSelectElement.appendChild(option);
+        });
+    } else if (modelStyles[modelId]) {
+        modelStyles[modelId].forEach(style => {
+            if(style.value !== '') { 
+                const option = document.createElement('option'); option.value = style.value; option.textContent = style.label; 
+                if(style.negativePrompt) option.dataset.negativePrompt = style.negativePrompt; // Add negative prompt to option
+                styleSelectElement.appendChild(option);
+            }
+        });
+    }
+    styleSelectElement.value = ''; // Default to "None"
+}
+
+// --- Helper function to update hidden inputs for style ---
+function updateHiddenStyleInputs() {
+    if (!styleSelectElement) return;
+    const selectedOption = styleSelectElement.options[styleSelectElement.selectedIndex];
+    const label = selectedOption ? selectedOption.textContent : '';
+    // Get negative prompt from dataset if it exists on the selected style option
+    const negativePromptValue = selectedOption ? (selectedOption.dataset.negativePrompt || '') : '';
+    
+    const labelInput = document.getElementById('style-label-input');
+    const negPromptInput = document.getElementById('negative-prompt-input');
+    if (labelInput) labelInput.value = label;
+    if (negPromptInput) negPromptInput.value = negativePromptValue;
+}
+
+// --- Helper function to toggle generate button based on prompt ---
+function toggleGenerateButtonState() {
+    const currentImageSubmit = document.getElementById('image-generate-button');
+    if (imagePrompt && currentImageSubmit) {
+       currentImageSubmit.disabled = imagePrompt.value.trim() === '';
+    }
+}
+
+// --- Helper function to update strength slider UI ---
+function updateStrengthSliderUI() {
+    if (imageStrengthSlider && imageStrengthValueDisplay) {
+       imageStrengthValueDisplay.textContent = parseFloat(imageStrengthSlider.value).toFixed(2);
+    }
+}
+
+// --- Control Initialization and Event Listeners ---
+function initializeCreateTabControls() {
+    debugLog('[Create Tab] initializeCreateTabControls called');
+    // Query for all elements needed by this tab's controls
+    imageUploadInput = document.getElementById('image-upload-input');
+    thumbnail = document.getElementById('image-thumbnail-preview');
+    placeholderIcon = document.getElementById('thumbnail-placeholder-icon');
+    clearButton = document.getElementById('clear-image-upload');
+    strengthControl = document.getElementById('image-strength-control');
+    imageStrengthSlider = document.getElementById('image-strength-slider');
+    imageStrengthValueDisplay = document.getElementById('image-strength-value-display');
+    aspectRatioButton = document.getElementById('aspect-ratio-dropdown');
+    modelSelect = document.getElementById('image-model-select');
+    styleSelectElement = document.getElementById('style-select');
+    imagePrompt = document.getElementById('image-prompt-input');
+    // imageSubmit is handled by setupCreateTab for its main click listener
+
+    if (!modelSelect || !styleSelectElement || !imageUploadInput || !imagePrompt || !aspectRatioButton || !strengthControl) {
+        console.warn('[Create Tab] initializeCreateTabControls: One or more essential control elements not found. Some controls may not initialize/update correctly.');
+    }
+    
+    // --- Attach Listeners (using cloning for elements that might get stale) ---
+    if (imagePrompt) {
+        const newImagePrompt = imagePrompt.cloneNode(true);
+        if(imagePrompt.parentNode) imagePrompt.parentNode.replaceChild(newImagePrompt, imagePrompt);
+        imagePrompt = newImagePrompt;
+        imagePrompt.addEventListener('input', () => autoResizeTextarea(imagePrompt));
+        imagePrompt.addEventListener('input', toggleGenerateButtonState);
+        autoResizeTextarea(imagePrompt); toggleGenerateButtonState(); // Initial calls
+    }
+
+    if(imageStrengthSlider) {
+        const newImageStrengthSlider = imageStrengthSlider.cloneNode(true);
+        if(imageStrengthSlider.parentNode) imageStrengthSlider.parentNode.replaceChild(newImageStrengthSlider, imageStrengthSlider);
+        imageStrengthSlider = newImageStrengthSlider;
+        imageStrengthSlider.addEventListener('input', updateStrengthSliderUI);
+        updateStrengthSliderUI(); // Initial call
+    }
+
+    if (imageUploadInput && thumbnail && placeholderIcon && clearButton) {
+        const newImageUploadInput = imageUploadInput.cloneNode(true);
+        if (imageUploadInput.parentNode) imageUploadInput.parentNode.replaceChild(newImageUploadInput, imageUploadInput);
+        imageUploadInput = newImageUploadInput;
+
+        imageUploadInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                if (!file.type.startsWith('image/')) { window.showToast('Please select an image file.', 'error'); return; }
+                if (file.size > 5 * 1024 * 1024) { window.showToast('File size exceeds 5MB limit.', 'error'); return; }
+                uploadedFileObject = file;
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    if(thumbnail) { thumbnail.src = e.target.result; thumbnail.classList.remove('hidden');}
+                    if(placeholderIcon) placeholderIcon.classList.add('hidden'); 
+                    if(clearButton) clearButton.classList.remove('hidden');
+                    updateControlsBasedOnState(); updateCostDisplay();
+                }
+                reader.readAsDataURL(file);
+            } else {
+                uploadedFileObject = null; 
+                if(thumbnail) { thumbnail.src = '#'; thumbnail.classList.add('hidden');}
+                if(placeholderIcon) placeholderIcon.classList.remove('hidden'); 
+                if(clearButton) clearButton.classList.add('hidden');
+                updateControlsBasedOnState(); updateCostDisplay();
+            }
+        });
+        
+        const newClearButton = clearButton.cloneNode(true);
+        if(clearButton.parentNode) clearButton.parentNode.replaceChild(newClearButton, clearButton);
+        clearButton = newClearButton;
+        clearButton.addEventListener('click', () => {
+            uploadedFileObject = null; if(imageUploadInput) imageUploadInput.value = ''; 
+            if(thumbnail) { thumbnail.src = '#'; thumbnail.classList.add('hidden');}
+            if(placeholderIcon) placeholderIcon.classList.remove('hidden'); 
+            if(clearButton) clearButton.classList.add('hidden');
+            updateControlsBasedOnState(); updateCostDisplay();
+        });
+    }
+    
+    const aspectRatioDropdownBtn = document.getElementById('aspect-ratio-dropdown'); // Re-fetch for listener
+    const aspectRatioOptionsDiv = document.getElementById('aspect-ratio-options');
+    if(aspectRatioDropdownBtn && aspectRatioOptionsDiv) {
+        // No need to clone aspectRatioButton if its listener is simple and doesn't change context
+        aspectRatioDropdownBtn.addEventListener('click', () => { 
+            if(aspectRatioButton.disabled) return; // Use the global aspectRatioButton here
+            aspectRatioOptionsDiv.classList.toggle('hidden');
+        });
+        
+        // For options, ensure listeners are fresh if options are dynamically loaded (not the case here)
+        // or if parent (aspectRatioOptionsDiv) is cloned. Here, we assume options are static.
+        aspectRatioOptionsDiv.querySelectorAll('.aspect-ratio-option').forEach(option => {
+            const newOption = option.cloneNode(true); // Clone to be safe with listeners
+            option.parentNode.replaceChild(newOption, option);
+            newOption.addEventListener('click', (e) => { 
+                e.preventDefault();
+                const selectedValue = newOption.dataset.value;
+                if(aspectRatioButton) aspectRatioButton.dataset.value = selectedValue; 
+                const textSpan = aspectRatioButton ? aspectRatioButton.querySelector('#selected-ratio-text') : null;
+                const iconSpan = aspectRatioButton ? aspectRatioButton.querySelector('#selected-ratio-icon') : null;
+                if(textSpan) textSpan.textContent = newOption.textContent.trim().split(' ')[1] || selectedValue;
+                if(iconSpan && newOption.querySelector('i')) iconSpan.innerHTML = newOption.querySelector('i').outerHTML;
+                aspectRatioOptionsDiv.classList.add('hidden');
+            });
+        });
+        document.addEventListener('click', (event) => { 
+            if (aspectRatioButton && !aspectRatioButton.contains(event.target) && 
+                aspectRatioOptionsDiv && !aspectRatioOptionsDiv.contains(event.target)) {
+                aspectRatioOptionsDiv.classList.add('hidden');
+            }
+        });
+    }
+
+    if (modelSelect) {
+        // Avoid cloning here, as setupCreateTab handles modelSelect listener
+        modelSelect.addEventListener('change', handleModelChange);
+    }
+    if (styleSelectElement) { 
+        const newStyleSelectElement = styleSelectElement.cloneNode(true);
+        if(styleSelectElement.parentNode) styleSelectElement.parentNode.replaceChild(newStyleSelectElement, styleSelectElement);
+        styleSelectElement = newStyleSelectElement;
+        styleSelectElement.addEventListener('change', updateHiddenStyleInputs);
+    }
+
+    // Initial state updates
+    updateControlsBasedOnState(); 
+    updateCostDisplay(); 
+    updateStyleDropdown(); 
+    updateHiddenStyleInputs();
+}
+
+// --- Event Handler for Model Change ---
+function handleModelChange() { 
+    debugLog('[Create Tab] handleModelChange triggered');
+    updateControlsBasedOnState(); 
+    updateCostDisplay(); 
+    updateStyleDropdown();
+    updateHiddenStyleInputs(); // Ensure hidden inputs (like negative prompt) are updated
 }
 
 // --- Main Setup Function (called by core.js) ---
 window.setupCreateTab = () => {
-    console.log('[Create Tab] setupCreateTab called');
+    debugLog('[Create Tab] setupCreateTab called');
     initializeCreateTabControls(); 
     
     imageSubmit = document.getElementById('image-generate-button'); 
@@ -113,12 +329,25 @@ window.setupCreateTab = () => {
     }
 
     imageSubmit.addEventListener('click', imageGenerationClickHandler);
-    console.log('[Create Tab] setupCreateTab: Attached new click listener to imageSubmit.');
+    debugLog('[Create Tab] setupCreateTab: Attached new click listener to imageSubmit.');
+
+    // Ensure modelSelect listener is attached (in case core.js refreshes DOM)
+    modelSelect = document.getElementById('image-model-select');
+    if (modelSelect) {
+        modelSelect.removeEventListener('change', handleModelChange); // Prevent duplicates
+        modelSelect.addEventListener('change', handleModelChange);
+        debugLog('[Create Tab] setupCreateTab: Attached change listener to image-model-select');
+    } else {
+        console.warn('[Create Tab] setupCreateTab: image-model-select not found');
+    }
+
+    // Initial cost update
+    updateCostDisplay();
 };
 
 // --- Image Generation Click Handler ---
 async function imageGenerationClickHandler(event) {
-    console.log('[Create Image Tab] Generate button clicked at', new Date().toISOString());
+    debugLog('[Create Image Tab] Generate button clicked at', new Date().toISOString());
     // Re-fetch critical elements within the handler to ensure they are current if DOM was manipulated
     imagePrompt = document.getElementById('image-prompt-input');
     modelSelect = document.getElementById('image-model-select');
@@ -143,21 +372,21 @@ async function imageGenerationClickHandler(event) {
 
     // --- CORRECTED AND SINGLE CONDITIONAL CLEARING LOGIC ---
     if (window.hasAccessedSideMenu || !window.isContentAreaDisplayingNewSession) {
-        console.log('[Create Tab] imageGenerationClickHandler: Clearing #chat-messages for new image generation session.');
+        debugLog('[Create Tab] imageGenerationClickHandler: Clearing #chat-messages for new image generation session.');
         if (!chatMessagesArea || !mainContentArea.contains(chatMessagesArea)) {
             mainContentArea.innerHTML = ''; 
             chatMessagesArea = document.createElement('div'); 
             chatMessagesArea.id = 'chat-messages';
             chatMessagesArea.classList.add('flex-1', 'overflow-y-auto', 'pb-32');
             mainContentArea.appendChild(chatMessagesArea);
-            console.log('[Create Tab] imageGenerationClickHandler: Created #chat-messages inside #content-area.');
+            debugLog('[Create Tab] imageGenerationClickHandler: Created #chat-messages inside #content-area.');
         } else {
             chatMessagesArea.innerHTML = '';
         }
         chatMessagesArea.innerHTML = '<h3 class="image-area-title text-lg font-semibold text-center py-4">New Image Generations</h3>';
         window.isContentAreaDisplayingNewSession = true;
         window.hasAccessedSideMenu = false; 
-        console.log('[Create Tab] imageGenerationClickHandler: #chat-messages cleared and titled. Flags updated.');
+        debugLog('[Create Tab] imageGenerationClickHandler: #chat-messages cleared and titled. Flags updated.');
     } else if (!chatMessagesArea) {
         console.warn('[Create Tab] imageGenerationClickHandler: #chat-messages not found. Recreating #chat-messages.');
         mainContentArea.innerHTML = ''; 
@@ -167,7 +396,7 @@ async function imageGenerationClickHandler(event) {
         mainContentArea.appendChild(chatMessagesArea);
         chatMessagesArea.innerHTML = '<h3 class="image-area-title text-lg font-semibold text-center py-4">New Image Generations</h3>';
         window.isContentAreaDisplayingNewSession = true; 
-        console.log('[Create Tab] imageGenerationClickHandler: Fallback - Recreated #chat-messages and set title.');
+        debugLog('[Create Tab] imageGenerationClickHandler: Fallback - Recreated #chat-messages and set title.');
     }
     // --- END OF CORRECTED CONDITIONAL CLEARING LOGIC ---
 
@@ -249,7 +478,7 @@ async function imageGenerationClickHandler(event) {
             else window.showToast(`Error: ${errorMsg}`, 'error');
         } else {
             const data = await response.json();
-            console.log("[Create Tab] API success response data:", JSON.stringify(data, null, 2));
+            debugLog("[Create Tab] API success response data:", JSON.stringify(data, null, 2));
 
             if (data.success && data.imageUrl) {
                 const imageCard = document.createElement('div');
@@ -319,239 +548,9 @@ async function imageGenerationClickHandler(event) {
     }
 }
 
-// --- Control Initialization and Event Listeners ---
-function initializeCreateTabControls() {
-    console.log('[Create Tab] initializeCreateTabControls called');
-    // Query for all elements needed by this tab's controls
-    imageUploadInput = document.getElementById('image-upload-input');
-    thumbnail = document.getElementById('image-thumbnail-preview');
-    placeholderIcon = document.getElementById('thumbnail-placeholder-icon');
-    clearButton = document.getElementById('clear-image-upload');
-    strengthControl = document.getElementById('image-strength-control');
-    imageStrengthSlider = document.getElementById('image-strength-slider');
-    imageStrengthValueDisplay = document.getElementById('image-strength-value-display');
-    aspectRatioButton = document.getElementById('aspect-ratio-dropdown');
-    modelSelect = document.getElementById('image-model-select');
-    styleSelectElement = document.getElementById('style-select');
-    imagePrompt = document.getElementById('image-prompt-input');
-    // imageSubmit is handled by setupCreateTab for its main click listener
-
-    if (!modelSelect || !styleSelectElement || !imageUploadInput || !imagePrompt || !aspectRatioButton || !strengthControl) {
-        console.warn('[Create Tab] initializeCreateTabControls: One or more essential control elements not found. Some controls may not initialize/update correctly.');
-    }
-    
-    // --- Helper function to update control states (e.g., disabled/enabled) ---
-    function updateControlsBasedOnState() {
-        // Ensure imageSubmit is also fresh if it's used for state checks here
-        const currentImageSubmit = document.getElementById('image-generate-button'); 
-        if (!modelSelect || !imagePrompt || !strengthControl || !currentImageSubmit || !aspectRatioButton) {
-            if(currentImageSubmit) currentImageSubmit.disabled = true; 
-            return;
-        }
-        const modelValue = modelSelect.value;
-        const models = window.RUNWARE_MODELS || {};
-        const selectedModelConfig = models[modelValue] || null;
-        const isImg2ImgCapable = selectedModelConfig ? selectedModelConfig.type !== 'text-to-image' : false;
-        const hasUploadedImage = uploadedFileObject !== null;
-        const hasPromptValue = imagePrompt.value.trim().length > 0;
-
-        strengthControl.classList.toggle('hidden', !(hasUploadedImage && isImg2ImgCapable));
-        let disableGenerate = false;
-        if (!isImg2ImgCapable) disableGenerate = !hasPromptValue;
-        else disableGenerate = !hasPromptValue || !hasUploadedImage;
-        currentImageSubmit.disabled = disableGenerate;
-
-        const photoMakerModelId = 'civitai:133005@782002';
-        const disableAspectRatio = hasUploadedImage && modelValue !== photoMakerModelId;
-        if(aspectRatioButton) { 
-            aspectRatioButton.disabled = disableAspectRatio;
-            aspectRatioButton.classList.toggle('opacity-50', disableAspectRatio);
-            aspectRatioButton.classList.toggle('cursor-not-allowed', disableAspectRatio);
-            if (disableAspectRatio) aspectRatioButton.title = "Aspect ratio is determined by the uploaded image";
-            else if (hasUploadedImage && modelValue === photoMakerModelId) aspectRatioButton.title = "Select Aspect Ratio (May be overridden by Face model)";
-            else aspectRatioButton.title = "Select Aspect Ratio";
-        }
-    }
-
-    // --- Helper function to update style dropdown based on selected model ---
-    function updateStyleDropdown() {
-        if (!styleSelectElement || !modelSelect) return;
-        const modelId = modelSelect.value; styleSelectElement.innerHTML = '';
-        const modelConfig = window.RUNWARE_MODELS ? window.RUNWARE_MODELS[modelId] : null;
-        
-        const noneOption = document.createElement('option');
-        noneOption.value = '';
-        noneOption.textContent = 'Style: None'; // Clearer "None" option
-        styleSelectElement.appendChild(noneOption);
-
-        if (modelConfig && modelConfig.usesPromptBasedStyling && window.PROMPT_BASED_STYLES && window.PROMPT_BASED_STYLES.length > 0) {
-            window.PROMPT_BASED_STYLES.forEach(style => {
-                const option = document.createElement('option'); option.value = style.value; option.textContent = style.name; styleSelectElement.appendChild(option);
-            });
-        } else if (modelStyles[modelId]) {
-            modelStyles[modelId].forEach(style => {
-                if(style.value !== '') { 
-                    const option = document.createElement('option'); option.value = style.value; option.textContent = style.label; 
-                    if(style.negativePrompt) option.dataset.negativePrompt = style.negativePrompt; // Add negative prompt to option
-                    styleSelectElement.appendChild(option);
-                }
-            });
-        }
-        styleSelectElement.value = ''; // Default to "None"
-    }
-    
-    // --- Helper function to update hidden inputs for style ---
-    function updateHiddenStyleInputs() {
-        if (!styleSelectElement) return;
-        const selectedOption = styleSelectElement.options[styleSelectElement.selectedIndex];
-        const label = selectedOption ? selectedOption.textContent : '';
-        // Get negative prompt from dataset if it exists on the selected style option
-        const negativePromptValue = selectedOption ? (selectedOption.dataset.negativePrompt || '') : '';
-        
-        const labelInput = document.getElementById('style-label-input');
-        const negPromptInput = document.getElementById('negative-prompt-input');
-        if (labelInput) labelInput.value = label;
-        if (negPromptInput) negPromptInput.value = negativePromptValue;
-    }
-
-    // --- Helper function to toggle generate button based on prompt ---
-    function toggleGenerateButtonState() {
-        const currentImageSubmit = document.getElementById('image-generate-button');
-        if (imagePrompt && currentImageSubmit) {
-           currentImageSubmit.disabled = imagePrompt.value.trim() === '';
-        }
-    }
-
-    // --- Helper function to update strength slider UI ---
-    function updateStrengthSliderUI() {
-        if (imageStrengthSlider && imageStrengthValueDisplay) {
-           imageStrengthValueDisplay.textContent = parseFloat(imageStrengthSlider.value).toFixed(2);
-        }
-    }
-    
-    // --- Attach Listeners (using cloning for elements that might get stale) ---
-    if (imagePrompt) {
-        const newImagePrompt = imagePrompt.cloneNode(true);
-        if(imagePrompt.parentNode) imagePrompt.parentNode.replaceChild(newImagePrompt, imagePrompt);
-        imagePrompt = newImagePrompt;
-        imagePrompt.addEventListener('input', () => autoResizeTextarea(imagePrompt));
-        imagePrompt.addEventListener('input', toggleGenerateButtonState);
-        autoResizeTextarea(imagePrompt); toggleGenerateButtonState(); // Initial calls
-    }
-
-    if(imageStrengthSlider) {
-        const newImageStrengthSlider = imageStrengthSlider.cloneNode(true);
-        if(imageStrengthSlider.parentNode) imageStrengthSlider.parentNode.replaceChild(newImageStrengthSlider, imageStrengthSlider);
-        imageStrengthSlider = newImageStrengthSlider;
-        imageStrengthSlider.addEventListener('input', updateStrengthSliderUI);
-        updateStrengthSliderUI(); // Initial call
-    }
-
-
-    if (imageUploadInput && thumbnail && placeholderIcon && clearButton) {
-        const newImageUploadInput = imageUploadInput.cloneNode(true);
-        if (imageUploadInput.parentNode) imageUploadInput.parentNode.replaceChild(newImageUploadInput, imageUploadInput);
-        imageUploadInput = newImageUploadInput;
-
-        imageUploadInput.addEventListener('change', function(event) {
-            const file = event.target.files[0];
-            if (file) {
-                if (!file.type.startsWith('image/')) { window.showToast('Please select an image file.', 'error'); return; }
-                if (file.size > 5 * 1024 * 1024) { window.showToast('File size exceeds 5MB limit.', 'error'); return; }
-                uploadedFileObject = file;
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    if(thumbnail) { thumbnail.src = e.target.result; thumbnail.classList.remove('hidden');}
-                    if(placeholderIcon) placeholderIcon.classList.add('hidden'); 
-                    if(clearButton) clearButton.classList.remove('hidden');
-                    updateControlsBasedOnState(); updateCostDisplay();
-                }
-                reader.readAsDataURL(file);
-            } else {
-                uploadedFileObject = null; 
-                if(thumbnail) { thumbnail.src = '#'; thumbnail.classList.add('hidden');}
-                if(placeholderIcon) placeholderIcon.classList.remove('hidden'); 
-                if(clearButton) clearButton.classList.add('hidden');
-                updateControlsBasedOnState(); updateCostDisplay();
-            }
-        });
-        
-        const newClearButton = clearButton.cloneNode(true);
-        if(clearButton.parentNode) clearButton.parentNode.replaceChild(newClearButton, clearButton);
-        clearButton = newClearButton;
-        clearButton.addEventListener('click', () => {
-            uploadedFileObject = null; if(imageUploadInput) imageUploadInput.value = ''; 
-            if(thumbnail) { thumbnail.src = '#'; thumbnail.classList.add('hidden');}
-            if(placeholderIcon) placeholderIcon.classList.remove('hidden'); 
-            if(clearButton) clearButton.classList.add('hidden');
-            updateControlsBasedOnState(); updateCostDisplay();
-        });
-    }
-    
-    const aspectRatioDropdownBtn = document.getElementById('aspect-ratio-dropdown'); // Re-fetch for listener
-    const aspectRatioOptionsDiv = document.getElementById('aspect-ratio-options');
-    if(aspectRatioDropdownBtn && aspectRatioOptionsDiv) {
-        // No need to clone aspectRatioButton if its listener is simple and doesn't change context
-        aspectRatioDropdownBtn.addEventListener('click', () => { 
-            if(aspectRatioButton.disabled) return; // Use the global aspectRatioButton here
-            aspectRatioOptionsDiv.classList.toggle('hidden');
-        });
-        
-        // For options, ensure listeners are fresh if options are dynamically loaded (not the case here)
-        // or if parent (aspectRatioOptionsDiv) is cloned. Here, we assume options are static.
-        aspectRatioOptionsDiv.querySelectorAll('.aspect-ratio-option').forEach(option => {
-            const newOption = option.cloneNode(true); // Clone to be safe with listeners
-            option.parentNode.replaceChild(newOption, option);
-            newOption.addEventListener('click', (e) => { 
-                e.preventDefault();
-                const selectedValue = newOption.dataset.value;
-                if(aspectRatioButton) aspectRatioButton.dataset.value = selectedValue; 
-                const textSpan = aspectRatioButton ? aspectRatioButton.querySelector('#selected-ratio-text') : null;
-                const iconSpan = aspectRatioButton ? aspectRatioButton.querySelector('#selected-ratio-icon') : null;
-                if(textSpan) textSpan.textContent = newOption.textContent.trim().split(' ')[1] || selectedValue;
-                if(iconSpan && newOption.querySelector('i')) iconSpan.innerHTML = newOption.querySelector('i').outerHTML;
-                aspectRatioOptionsDiv.classList.add('hidden');
-            });
-        });
-        document.addEventListener('click', (event) => { 
-            if (aspectRatioButton && !aspectRatioButton.contains(event.target) && 
-                aspectRatioOptionsDiv && !aspectRatioOptionsDiv.contains(event.target)) {
-                aspectRatioOptionsDiv.classList.add('hidden');
-            }
-        });
-    }
-
-    if (modelSelect) {
-       const newModelSelect = modelSelect.cloneNode(true);
-       if(modelSelect.parentNode) modelSelect.parentNode.replaceChild(newModelSelect, modelSelect);
-       modelSelect = newModelSelect;
-       modelSelect.addEventListener('change', handleModelChange);
-    }
-    if (styleSelectElement) { 
-        const newStyleSelectElement = styleSelectElement.cloneNode(true);
-        if(styleSelectElement.parentNode) styleSelectElement.parentNode.replaceChild(newStyleSelectElement, styleSelectElement);
-        styleSelectElement = newStyleSelectElement;
-        styleSelectElement.addEventListener('change', updateHiddenStyleInputs);
-    }
-
-    // Initial state updates
-    updateControlsBasedOnState(); 
-    updateCostDisplay(); 
-    updateStyleDropdown(); 
-    updateHiddenStyleInputs();
-}
-
-// --- Event Handler for Model Change ---
-function handleModelChange() { 
-    updateControlsBasedOnState(); 
-    updateCostDisplay(); 
-    updateStyleDropdown();
-    updateHiddenStyleInputs(); // Ensure hidden inputs (like negative prompt) are updated
-}
-
 // --- Initial DOM Ready Setup ---
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeCreateTabControls);
 } else {
-    initializeCreateTabControls(); // Already loaded
+    initializeCreateTabControls();
 }

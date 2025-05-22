@@ -11,7 +11,7 @@ let galleryGridObserver = null; // Hold observer instance
 
 // --- Fullscreen Modal Functions ---
 function openFullscreenModal(imageUrl) {
-    console.log('[gallery.js] openFullscreenModal called');
+    debugLog('[gallery.js] openFullscreenModal called');
     const modal = document.getElementById('fullscreen-modal');
     const img = document.getElementById('fullscreen-image');
     if (modal && img) {
@@ -23,7 +23,7 @@ function openFullscreenModal(imageUrl) {
 }
 
 function closeFullscreenModal() {
-    console.log('[gallery.js] closeFullscreenModal called.');
+    debugLog('[gallery.js] closeFullscreenModal called.');
     const modal = document.getElementById('fullscreen-modal');
     if (modal) {
         modal.classList.add('hidden');
@@ -37,10 +37,10 @@ function closeFullscreenModal() {
 document.addEventListener('DOMContentLoaded', () => {
     const closeButton = document.getElementById('close-fullscreen-modal'); 
     if (closeButton) {
-        console.log('[gallery.js] Attaching DOMContentLoaded listener to main close button:', closeButton);
+        debugLog('[gallery.js] Attaching DOMContentLoaded listener to main close button:', closeButton);
         closeButton.addEventListener('click', (event) => {
             event.stopPropagation(); 
-            console.log('[gallery.js] Main close button clicked (DOMContentLoaded listener).');
+            debugLog('[gallery.js] Main close button clicked (DOMContentLoaded listener).');
             closeFullscreenModal();
         });
     } else {
@@ -136,7 +136,7 @@ async function postComment(contentId) {
 
 // --- Comments Modal Function ---
 window.openCommentsModal = function(contentId, imageUrl, promptText = 'Loading...') { 
-    console.log(`[gallery.js] openCommentsModal called. ID: ${contentId}`);
+    debugLog(`[gallery.js] openCommentsModal called. ID: ${contentId}`);
     currentContentId = contentId; 
     const modal = document.getElementById('comments-modal');
     if (!modal) {
@@ -411,7 +411,7 @@ async function loadImages() {
 
 // --- Main Initialization Function for Gallery View ---
 window.initializeGallery = async function() {
-    console.log('[gallery.js] initializeGallery called.');
+    debugLog('[gallery.js] initializeGallery called.');
     const contentArea = document.getElementById('content-area');
     if (!contentArea) {
         console.error('[gallery.js] initializeGallery: Content area not found');
@@ -440,7 +440,7 @@ window.initializeGallery = async function() {
             percentPosition: true,
             initLayout: true 
         });
-        console.log('[gallery.js] Masonry initialized.');
+        debugLog('[gallery.js] Masonry initialized.');
     } else {
         console.error('[gallery.js] Masonry could not be initialized. image-list or Masonry library missing.');
     }
@@ -452,7 +452,7 @@ window.initializeGallery = async function() {
 
 // --- Function to set up observers and dynamic features ---
 function activateGalleryFeatures() {
-    console.log('[Gallery.js] activateGalleryFeatures called.');
+    debugLog('[Gallery.js] activateGalleryFeatures called.');
 
     const imageListElement = document.getElementById('image-list');
     // Assuming gallery-grid is the same as image-list for observer purposes or not used for likes.
@@ -461,11 +461,11 @@ function activateGalleryFeatures() {
     if (imageListObserver) imageListObserver.disconnect(); // Disconnect previous if any
 
     if (imageListElement) {
-        console.log('[Gallery.js] #image-list found, initializing like buttons and setting up MutationObserver.');
+        debugLog('[Gallery.js] #image-list found, initializing like buttons and setting up MutationObserver.');
         if (typeof initializeLikeButtons === 'function') initializeLikeButtons();
         
         imageListObserver = new MutationObserver(() => {
-            console.log('[Gallery.js] #image-list mutated, re-initializing like buttons.');
+            debugLog('[Gallery.js] #image-list mutated, re-initializing like buttons.');
             if (typeof initializeLikeButtons === 'function') initializeLikeButtons();
             if (masonryInstance) masonryInstance.layout(); 
         });
@@ -479,7 +479,7 @@ function activateGalleryFeatures() {
         // To prevent multiple scroll listeners, remove before adding.
         scrollContainer.removeEventListener('scroll', galleryScrollHandler); 
         scrollContainer.addEventListener('scroll', galleryScrollHandler);
-        console.log('[gallery.js] Scroll listener attached to #content-area for infinite scroll.');
+        debugLog('[gallery.js] Scroll listener attached to #content-area for infinite scroll.');
     } else {
         console.warn('[gallery.js] Scroll container #content-area not found for infinite scroll.');
     }
@@ -491,7 +491,7 @@ function galleryScrollHandler() {
     if (!scrollContainer) return;
     if (scrollContainer.scrollTop + scrollContainer.clientHeight >= scrollContainer.scrollHeight - 300) {
         if (!isLoading && hasMoreImages) {
-            console.log('[gallery.js] Near bottom, loading more images...');
+            debugLog('[gallery.js] Near bottom, loading more images...');
             loadImages();
         }
     }
@@ -499,9 +499,9 @@ function galleryScrollHandler() {
 
 // --- Like Button Initialization ---
 function initializeLikeButtons() {
-    console.log('[gallery.js] Initializing like buttons...');
+    debugLog('[gallery.js] Initializing like buttons...');
     const likeButtons = document.querySelectorAll('.like-btn');
-    console.log(`[gallery.js] Found ${likeButtons.length} like buttons.`);
+    debugLog(`[gallery.js] Found ${likeButtons.length} like buttons.`);
 
     likeButtons.forEach(button => {
         // Check if listener already attached to prevent duplicates if cloning isn't perfect

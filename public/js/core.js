@@ -1,18 +1,27 @@
+window.DEBUG_ENABLED = false;
+
+// Utility function for conditional logging
+window.debugLog = (...args) => {
+  if (window.DEBUG_ENABLED) {
+    console.log(...args);
+  }
+};
+
 // Debug: Confirm script is loading
-console.log('[core.js] Script loaded at:', new Date().toISOString());
+debugLog('[core.js] Script loaded at:', new Date().toISOString());
 
 try {
     document.addEventListener('DOMContentLoaded', () => {
-        console.log('[core.js] DOMContentLoaded fired');
+        debugLog('[core.js] DOMContentLoaded fired');
 
         // Popstate handler
         try {
             window.addEventListener('popstate', (event) => {
-                console.log('[Popstate] Handling popstate event:', event.state, 'URL:', window.location.pathname);
+                debugLog('[Popstate] Handling popstate event:', event.state, 'URL:', window.location.pathname);
 
                 const modal = document.getElementById('comments-modal');
                 if (event.state && event.state.modal && modal && !modal.classList.contains('hidden')) {
-                    console.log('[Popstate] Closing modal without reload');
+                    debugLog('[Popstate] Closing modal without reload');
                     modal.classList.add('hidden');
                     window.currentContentId = null; // Reset global from gallery.js
                     history.replaceState({}, '', '/');
@@ -28,7 +37,7 @@ try {
                 }
 
                 if (path === '/gallery') {
-                    console.log('[Popstate] Triggering Gallery initialization');
+                    debugLog('[Popstate] Triggering Gallery initialization');
                     if (window.initializeGallery) {
                         initializeGallery();
                     } else {
@@ -36,16 +45,16 @@ try {
                         contentArea.innerHTML = '<p class="text-center text-red-500 p-4">Error loading gallery.</p>';
                     }
                 } else if (path.match(/^\/image\/\d+$/)) {
-                    console.log('[Popstate] Image route detected, checking modal state');
+                    debugLog('[Popstate] Image route detected, checking modal state');
                     if (!event.state || !event.state.modal) {
-                        console.log('[Popstate] Reloading for direct image access');
+                        debugLog('[Popstate] Reloading for direct image access');
                         window.location.reload();
                     }
                 } else { // Handles root path '/' or other unhandled paths
                     if (path === '/' && window.isContentAreaDisplayingNewSession === true) {
                         // If on root path AND we were just displaying a new session (chat/images),
                         // do NOT clear it. The user likely just closed a modal.
-                        console.log('[Popstate] On root path, but preserving active new session content.');
+                        debugLog('[Popstate] On root path, but preserving active new session content.');
                         // Ensure the title is appropriate for the root, or keep the session title
                         document.title = 'Pixzor'; // Or keep the session title if preferred
                         // history.replaceState might not be needed if already at '/'
@@ -57,10 +66,10 @@ try {
                         // The safest immediate action is to prevent clearing if contentArea has children
                         // and it's not the "Please refresh" message.
                         if (contentArea && contentArea.firstChild && !contentArea.textContent.includes("Please refresh or click Home")) {
-                             console.log('[Popstate] On root path, existing content found, not clearing to "Please refresh".');
+                             debugLog('[Popstate] On root path, existing content found, not clearing to "Please refresh".');
                              document.title = 'Pixzor';
                         } else if (contentArea) {
-                             console.log('[Popstate] Defaulting to root content - showing "Please refresh" message.');
+                             debugLog('[Popstate] Defaulting to root content - showing "Please refresh" message.');
                              contentArea.innerHTML = '<p class="text-center text-gray-400 p-4">Please refresh or click Home to load chat UI.</p>';
                              history.replaceState({}, '', '/'); // Ensure URL is clean
                              document.title = 'Pixzor';
@@ -68,7 +77,7 @@ try {
                     } else {
                         // For any other unhandled paths, show the "Please refresh" message.
                         if (contentArea) {
-                            console.log(`[Popstate] Unhandled path '${path}', defaulting to "Please refresh" message.`);
+                            debugLog(`[Popstate] Unhandled path '${path}', defaulting to "Please refresh" message.`);
                             contentArea.innerHTML = '<p class="text-center text-gray-400 p-4">Please refresh or click Home to load chat UI.</p>';
                             document.title = 'Pixzor';
                         }
@@ -79,15 +88,15 @@ try {
             console.error('[core.js] Popstate handler error:', error);
         }
 
-        console.log('[core.js] Page loaded, checking modals...');
+        debugLog('[core.js] Page loaded, checking modals...');
         try {
             const modals = document.querySelectorAll('.modal');
             modals.forEach(modal => {
-                console.log(`[core.js] Modal ${modal.id}: display=${getComputedStyle(modal).display}, hidden=${modal.classList.contains('hidden')}`);
+                debugLog(`[core.js] Modal ${modal.id}: display=${getComputedStyle(modal).display}, hidden=${modal.classList.contains('hidden')}`);
                 const observer = new MutationObserver(mutations => {
                     mutations.forEach(mutation => {
                         if (mutation.attributeName === 'class') {
-                            console.log(`[core.js] Modal ${modal.id} hidden class changed: ${modal.classList.contains('hidden')}`);
+                            debugLog(`[core.js] Modal ${modal.id} hidden class changed: ${modal.classList.contains('hidden')}`);
                         }
                     });
                 });
@@ -100,10 +109,10 @@ try {
 
     // Log modal display changes
     window.addEventListener('load', () => {
-        console.log('[core.js] Window loaded, final modal states:');
+        debugLog('[core.js] Window loaded, final modal states:');
         try {
             document.querySelectorAll('.modal').forEach(modal => {
-                console.log(`[core.js] Modal ${modal.id}: display=${getComputedStyle(modal).display}, hidden=${modal.classList.contains('hidden')}`);
+                debugLog(`[core.js] Modal ${modal.id}: display=${getComputedStyle(modal).display}, hidden=${modal.classList.contains('hidden')}`);
             });
         } catch (error) {
             console.error('[core.js] Modal load error:', error);
@@ -115,14 +124,14 @@ try {
         const protocol = window.location.protocol === 'http:' ? 'ws://' : 'wss://';
         const ws = new WebSocket(`${protocol}${window.location.host}`);
 
-        ws.onopen = () => console.log('[core.js] WebSocket connected');
+        ws.onopen = () => debugLog('[core.js] WebSocket connected');
         ws.onerror = (error) => console.error('[core.js] WebSocket error:', error);
-        ws.onclose = (event) => console.log('[core.js] WebSocket disconnected:', event.code, event.reason);
+        ws.onclose = (event) => debugLog('[core.js] WebSocket disconnected:', event.code, event.reason);
 
         window.sendChatMsg = function(messageObject) {
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify(messageObject));
-                console.log('[core.js] WebSocket sent:', messageObject);
+                debugLog('[core.js] WebSocket sent:', messageObject);
             } else {
                 console.error('[core.js] WebSocket is not open. ReadyState:', ws.readyState);
                 window.showToast('Connection lost. Please refresh.', 'error');
@@ -132,18 +141,18 @@ try {
          ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                console.log('[core.js] WebSocket Received:', JSON.stringify(data, null, 2));
+                debugLog('[core.js] WebSocket Received:', JSON.stringify(data, null, 2));
 
                 let chatMessages = document.getElementById('chat-messages');
                 if (!chatMessages) {
-                    console.log('[core.js] #chat-messages not found, attempting to recreate');
+                    debugLog('[core.js] #chat-messages not found, attempting to recreate');
                     const contentArea = document.getElementById('content-area');
                     if (contentArea) {
                         chatMessages = document.createElement('div');
                         chatMessages.id = 'chat-messages';
                         chatMessages.classList.add('flex-1', 'overflow-y-auto', 'pb-32');
                         contentArea.appendChild(chatMessages);
-                        console.log('[core.js] Created #chat-messages in #content-area');
+                        debugLog('[core.js] Created #chat-messages in #content-area');
                     } else {
                         console.error('[core.js] #content-area not found, cannot process WebSocket message');
                         window.showToast('Chat area not found. Please refresh.', 'error');
@@ -174,7 +183,7 @@ try {
                         console.warn('[core.js] marked.js not found. Displaying raw text.');
                         lastBotMessage.textContent = lastBotMessage.dataset.rawMarkdown;
                     }
-                    console.log('[core.js] Appended messageChunk to #chat-messages');
+                    debugLog('[core.js] Appended messageChunk to #chat-messages');
                     chatMessages.scrollTop = chatMessages.scrollHeight;
                 } else if (data.type === 'chat' && data.sender === 'ai') {
                     const botDiv = document.createElement('div');
@@ -186,7 +195,7 @@ try {
                         botDiv.textContent = data.message || '';
                     }
                     chatMessages.appendChild(botDiv);
-                    console.log('[core.js] Appended chat message to #chat-messages');
+                    debugLog('[core.js] Appended chat message to #chat-messages');
                     chatMessages.scrollTop = chatMessages.scrollHeight;
                 } else if (data.type === 'status') {
                     const existingStatus = chatMessages.querySelector('.chat-message.status');
@@ -195,7 +204,7 @@ try {
                     statusDiv.classList.add('chat-message', 'status');
                     statusDiv.textContent = data.message || '...';
                     chatMessages.appendChild(statusDiv);
-                    console.log('[core.js] Appended status to #chat-messages');
+                    debugLog('[core.js] Appended status to #chat-messages');
                     chatMessages.scrollTop = chatMessages.scrollHeight;
                 } else if (data.type === 'imageResult') {
                     const imageDiv = document.createElement('div');
@@ -210,7 +219,7 @@ try {
                         <button class="share-image-button" data-image-id="${data.contentId}">Share</button>
                     `;
                     chatMessages.appendChild(imageDiv);
-                    console.log('[core.js] Appended imageResult to #chat-messages');
+                    debugLog('[core.js] Appended imageResult to #chat-messages');
                     chatMessages.scrollTop = chatMessages.scrollHeight;
                 } else if (data.type === 'chatEnd' && data.image) {
                     const loadingDiv = chatMessages.querySelector('.image-loading');
@@ -219,7 +228,7 @@ try {
                     imageDiv.classList.add('chat-message', 'bot-message');
                     imageDiv.innerHTML = `Here is your image: <img src="${data.image}" class="thumbnail" alt="Generated Image">`;
                     chatMessages.appendChild(imageDiv);
-                    console.log('[core.js] Appended chatEnd image to #chat-messages');
+                    debugLog('[core.js] Appended chatEnd image to #chat-messages');
                     chatMessages.scrollTop = chatMessages.scrollHeight;
                 } else if (data.type === 'SetTitle') {
                     document.title = `${data.newTitle} | Pixzor`;
@@ -232,7 +241,7 @@ try {
 
         // Log WebSocket send for debugging
         window.sendChatMsg = (msg) => {
-            console.log('[core.js] WebSocket sent:', JSON.stringify(msg, null, 2));
+            debugLog('[core.js] WebSocket sent:', JSON.stringify(msg, null, 2));
             ws.send(JSON.stringify(msg));
         };
     } catch (error) {
@@ -260,24 +269,30 @@ try {
         }
     };
 
-    // User Authentication
+   // User Authentication
     try {
         window.isLoggedIn = false;
-        fetch('/api/user-info')
+        fetch('/api/user-info', {
+            credentials: 'same-origin' // Include session cookies
+        })
             .then(response => {
                 if (response.ok) {
                     window.isLoggedIn = true;
                     return response.json();
                 } else {
                     window.isLoggedIn = false;
-                    return null;
+                    return response.json().catch(() => ({ error: 'Unknown error' }))
+                        .then(errorData => {
+                            debugLog('[core.js] User not authenticated:', errorData.error);
+                            return null;
+                        });
                 }
             })
             .then(data => {
                 const tokenCount = document.getElementById('token-count');
                 const authButton = document.getElementById('google-auth-button');
                 const authText = document.getElementById('auth-text');
-                if (window.isLoggedIn && tokenCount && authButton && authText) {
+                if (window.isLoggedIn && data && tokenCount && authButton && authText) {
                     const credits = parseFloat(data.credits) || 0;
                     tokenCount.textContent = `$${credits.toFixed(2)} Credits`;
                     authText.textContent = 'Logout';
@@ -291,11 +306,16 @@ try {
             .catch(error => {
                 console.error('[core.js] Error fetching user data:', error);
                 const tokenCount = document.getElementById('token-count');
-                if (tokenCount) tokenCount.textContent = '0 Credits';
+                const authButton = document.getElementById('google-auth-button');
+                const authText = document.getElementById('auth-text');
+                if (tokenCount) tokenCount.textContent = '- Credits';
+                if (authText) authText.textContent = 'Login';
+                if (authButton) authButton.onclick = () => window.location.href = '/auth/google';
                 window.isLoggedIn = false;
             });
     } catch (error) {
         console.error('[core.js] User authentication error:', error);
+        window.isLoggedIn = false;
     }
 
     
@@ -307,9 +327,9 @@ try {
     const sidebarItems = document.querySelectorAll('.sidebar-item');
     const contentArea = document.getElementById('content-area');
 
-    console.log('[core.js] Sidebar items found:', sidebarItems.length, 'at', new Date().toISOString());
-    console.log('[core.js] Content area exists:', !!contentArea, 'ID:', contentArea?.id);
-    console.log('[core.js] #chat-messages exists:', !!document.querySelector('#chat-messages'));
+    debugLog('[core.js] Sidebar items found:', sidebarItems.length, 'at', new Date().toISOString());
+    debugLog('[core.js] Content area exists:', !!contentArea, 'ID:', contentArea?.id);
+    debugLog('[core.js] #chat-messages exists:', !!document.querySelector('#chat-messages'));
 
     if (!contentArea) {
         console.error('[core.js] Content area not found');
@@ -318,7 +338,7 @@ try {
 
     // Function to load chat tab partial
     const loadChatTab = async (section, activeTab = 'create-images') => {
-      console.log(`[core.js] loadChatTab called with section=${section}, activeTab=${activeTab}`);
+      debugLog(`[core.js] loadChatTab called with section=${section}, activeTab=${activeTab}`);
 
       const mainContentArea = document.getElementById('content-area');
       if (!mainContentArea) {
@@ -335,13 +355,13 @@ try {
       mainContentArea.appendChild(chatMessagesDiv);
       const titleText = activeTab === 'chat-talk' ? 'New Chat Conversation' : 'New Image Generations';
       chatMessagesDiv.innerHTML = `<h3 class="${activeTab === 'chat-talk' ? 'chat-area-title' : 'image-area-title'} text-lg font-semibold mb-4">${titleText}</h3>`;
-      console.log(`[core.js] Created #chat-messages with title: "${titleText}"`);
+      debugLog(`[core.js] Created #chat-messages with title: "${titleText}"`);
 
       // Update global flags
       window.isContentAreaDisplayingNewSession = true;
       window.currentChatSessionId = null;
       window.hasAccessedSideMenu = false;
-      console.log('[core.js] Flags updated: ICDNS=true, HSSM=false, currentChatSessionId=null');
+      debugLog('[core.js] Flags updated: ICDNS=true, HSSM=false, currentChatSessionId=null');
 
       // Activate bottom bar tab
       const bottomChatTabsContainer = document.querySelector('.chat-tabs');
@@ -351,7 +371,7 @@ try {
         const targetTab = bottomChatTabsContainer.querySelector(`.chat-tab[data-tab="${activeTab === 'chat-talk' ? 'chat' : 'create-images'}"]`);
         if (targetTab) {
           targetTab.classList.add('active');
-          console.log(`[core.js] Activated bottom bar tab: ${targetTab.dataset.tab}`);
+          debugLog(`[core.js] Activated bottom bar tab: ${targetTab.dataset.tab}`);
         } else {
           console.warn('[core.js] Target tab not found in .chat-tabs');
         }
@@ -367,7 +387,7 @@ try {
           const response = await fetch(`/chat-tab/${activeTab === 'chat-talk' ? 'chat' : 'create-images'}`);
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           chatTabContent.innerHTML = await response.text();
-          console.log('[core.js] Refreshed #chat-tab-content');
+          debugLog('[core.js] Refreshed #chat-tab-content');
         } catch (error) {
           console.error('[core.js] Error fetching /chat-tab:', error);
           window.showToast('Failed to load chat panel. Please refresh.', 'error');
@@ -384,7 +404,7 @@ try {
       if (createImageInputPanel) {
         createImageInputPanel.style.display = 'none';
         createImageInputPanel.classList.remove('active');
-        console.log('[core.js] Hid #create-images-content');
+        debugLog('[core.js] Hid #create-images-content');
       } else {
         console.warn('[core.js] #create-images-content not found');
       }
@@ -392,7 +412,7 @@ try {
       if (chatTalkInputPanel) {
         chatTalkInputPanel.style.display = 'none';
         chatTalkInputPanel.classList.remove('active');
-        console.log('[core.js] Hid #chat-talk');
+        debugLog('[core.js] Hid #chat-talk');
       } else {
         console.error('[core.js] #chat-talk not found - critical for chat functionality');
       }
@@ -400,14 +420,14 @@ try {
       if (activeTab === 'create-images' && createImageInputPanel) {
         createImageInputPanel.style.display = 'flex';
         createImageInputPanel.classList.add('active');
-        console.log('[core.js] Activated #create-images-content');
+        debugLog('[core.js] Activated #create-images-content');
         if (typeof window.setupCreateTab === 'function') {
           window.setupCreateTab();
         }
       } else if (activeTab === 'chat-talk' && chatTalkInputPanel) {
         chatTalkInputPanel.style.display = 'flex';
         chatTalkInputPanel.classList.add('active');
-        console.log('[core.js] Activated #chat-talk');
+        debugLog('[core.js] Activated #chat-talk');
         if (typeof window.setupChat === 'function') {
           window.setupChat();
         }
@@ -416,7 +436,7 @@ try {
         window.showToast('Input panel not found. Please refresh.', 'error');
       }
 
-      console.log('[core.js] loadChatTab finished');
+      debugLog('[core.js] loadChatTab finished');
     };
     window.loadChatTab = loadChatTab;
 
@@ -425,21 +445,21 @@ try {
             try {
                 event.preventDefault();
                 const section = item.dataset.section;
-                console.log(`[core.js] Sidebar clicked on section: ${section} at`, new Date().toISOString());
-                console.log('[core.js] #chat-messages exists before load:', !!document.querySelector('#chat-messages'));
+                debugLog(`[core.js] Sidebar clicked on section: ${section} at`, new Date().toISOString());
+                debugLog('[core.js] #chat-messages exists before load:', !!document.querySelector('#chat-messages'));
 
                 // Set hasAccessedSideMenu for sections that load content into #content-area
                 if (['files', 'gallery', 'chat-history'].includes(section)) {
                     window.hasAccessedSideMenu = true;
-                    console.log('[core.js] Set window.hasAccessedSideMenu to true for section:', section, 'Value:', window.hasAccessedSideMenu);
+                    debugLog('[core.js] Set window.hasAccessedSideMenu to true for section:', section, 'Value:', window.hasAccessedSideMenu);
                 } else {
-                    console.log('[core.js] No hasAccessedSideMenu set for section:', section);
+                    debugLog('[core.js] No hasAccessedSideMenu set for section:', section);
                 }
                 
                 // Reset chat area flag for chat-history, gallery, or files
                 if ( section === 'chat-history' || section === 'gallery' || section === 'files' ) {
                     window.isContentAreaDisplayingNewSession = false;
-                    console.log('[core.js] Reset window.isContentAreaDisplayingNewSession for section:', section);
+                    debugLog('[core.js] Reset window.isContentAreaDisplayingNewSession for section:', section);
                 }
 
                 // Remove active class from all items and add to the clicked one
@@ -765,7 +785,7 @@ try {
     // Modals
     try {
         document.addEventListener('DOMContentLoaded', () => {
-            console.log('[core.js] Modals DOMContentLoaded fired');
+            debugLog('[core.js] Modals DOMContentLoaded fired');
             fetch('/partials/modals')
                 .then(response => response.text())
                 .then(html => {
@@ -779,7 +799,7 @@ try {
                         const modal = document.getElementById(id);
                         if (modal) {
                             modal.classList.remove('hidden');
-                            console.log(`[core.js] Modal ${id} shown`);
+                            debugLog(`[core.js] Modal ${id} shown`);
                         } else {
                             console.error(`[core.js] Modal with ID ${id} not found`);
                         }
@@ -788,7 +808,7 @@ try {
                         const modal = document.getElementById(id);
                         if (modal) {
                             modal.classList.add('hidden');
-                            console.log(`[core.js] Modal ${id} hidden`);
+                            debugLog(`[core.js] Modal ${id} hidden`);
                         } else {
                             console.error(`[core.js] Modal with ID ${id} not found`);
                         }
@@ -810,7 +830,10 @@ try {
                     if (closeBuyTokensModal) {
                         closeBuyTokensModal.addEventListener('click', () => window.hideModal('buy-tokens-modal'));
                     }
-                    const stripePublishableKey = 'pk_test_51QNNomGgZQx5JKvI2PAzM2GO5f0ukOcam2RUMj0ceduOPIuoRmWgqt7nqs46lRF7eyKd46Q8MRs1OYX76xi7fxHQ00LwfUHss5';
+
+                    const stripePublishableKey = 'pk_live_51QNNomGgZQx5JKvIyEzYuHbqZRdugWTVlseapCphcAL3gYdrXfSIN8R6toeaReScar1gFyxRODHv0XG1cf54xUsM00zJcyWw8j';
+                
+                    //const stripePublishableKey = 'pk_test_51QNNomGgZQx5JKvI2PAzM2GO5f0ukOcam2RUMj0ceduOPIuoRmWgqt7nqs46lRF7eyKd46Q8MRs1OYX76xi7fxHQ00LwfUHss5';
                     let stripe = null;
                     if (typeof Stripe === 'function') {
                         stripe = Stripe(stripePublishableKey);
@@ -906,4 +929,4 @@ try {
 // Removed automatic call to loadChatTab on initial page load.
 // The server should render the initial state (e.g., with splash screen).
 // window.isContentAreaDisplayingNewSession should be false initially (set in layout.ejs).
-console.log('[core.js] Initial UI load is now handled by server-side rendering or specific user actions.');
+debugLog('[core.js] Initial UI load is now handled by server-side rendering or specific user actions.');
