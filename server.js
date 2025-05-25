@@ -477,6 +477,14 @@ app.delete('/api/library/chats/:chatId', async (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error('[Server] Error:', err.stack);
+    if (req.path.startsWith('/api')) {
+        // Return JSON for API routes
+        if (err.code === 'EBADCSRFTOKEN') {
+            return res.status(403).json({ success: false, error: 'Invalid CSRF token' });
+        }
+        return res.status(500).json({ success: false, error: err.message || 'Internal Server Error' });
+    }
+    // Render HTML for non-API routes
     if (err.code === 'EBADCSRFTOKEN') {
         res.status(403).send('Invalid CSRF token');
     } else {
