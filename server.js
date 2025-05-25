@@ -56,7 +56,16 @@ app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);
 app.use(passport.initialize());
 app.use(passport.session());
-app.use(csrf({ cookie: true }));
+//app.use(csrf({ cookie: true }));
+
+// Bypass CSRF for /api/add-generated-image
+app.use((req, res, next) => {
+    if (req.path === '/api/add-generated-image') {
+        return next();
+    }
+    csrf({ cookie: true })(req, res, next);
+});
+
 app.use(expressLayouts);
 app.set('view engine', 'ejs');
 app.set('views', './views');
