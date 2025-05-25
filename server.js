@@ -391,13 +391,9 @@ app.post('/api/add-generated-image', async (req, res) => {
             type: 'image',
             contentUrl,
             prompt,
-            modelUsed,
-            modelId,
-            width,
-            height,
-            apiResponseId,
-            isPublic,
-            tokenCost: 1
+            model: modelUsed, // Map modelUsed to model
+            tokenCost: 1,
+            isPublic
         });
 
         console.log(`[API Add Image] Saved image record with ID: ${newContent.id}, isPublic: ${newContent.isPublic}`);
