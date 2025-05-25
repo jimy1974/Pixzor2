@@ -73,7 +73,7 @@ app.set('layout', 'layouts/layout');
 
 // Pass CSRF token and globals to all views
 app.use((req, res, next) => {
-    res.locals.csrfToken = req.csrfToken();
+    res.locals.csrfToken = typeof req.csrfToken === 'function' && req.path !== '/api/add-generated-image' ? req.csrfToken() : null;
     res.locals.isLoggedIn = req.isAuthenticated();
     res.locals.user = req.user ? {
         id: req.user.id,
@@ -82,8 +82,8 @@ app.use((req, res, next) => {
         credits: req.user.credits,
         photo: req.user.photo
     } : null;
-    res.locals.runwareModels = RUNWARE_MODELS; // From modelsConfig.js
-    res.locals.promptBasedStyles = PROMPT_BASED_STYLES; // From stylesConfig.js
+    res.locals.runwareModels = RUNWARE_MODELS;
+    res.locals.promptBasedStyles = PROMPT_BASED_STYLES;
     next();
 });
 
