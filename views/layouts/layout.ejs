@@ -3,11 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-     <meta name="description" content="<%= locals.description || 'Create AI movies, images, and chat with Pixzor' %>">
+    <meta name="description" content="<%= locals.description || 'Create AI movies, images, and chat with Pixzor' %>">
     <meta property="og:title" content="<%= title %>">
-    
     <meta property="og:image" content="<%= typeof imageUrl !== 'undefined' ? imageUrl : 'https://www.pixzor.com/images/default.jpg' %>">
-    
     <title><%= title %></title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
@@ -17,7 +15,9 @@
     <link rel="preload" href="/js/chat-tab.js" as="script">
     <link rel="preload" href="/js/create-tab.js" as="script">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">    
-    <meta name="csrf-token" content="<%= csrfToken %>">
+    <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+        <meta name="csrf-token" content="<%= csrfToken %>">
+    <% } %>
     <script>
         window.isLoggedIn = <%= isLoggedIn ? 'true' : 'false' %>;
         window.currentUser = <%- user ? JSON.stringify(user) : 'null' %>;
@@ -29,14 +29,10 @@
         window.isContentAreaDisplayingNewSession = false; // True if #chat-messages is showing "New Chat" or "New Image Gen"
         window.currentChatSessionId = null; // Track current chat session ID
     </script>
-    <!-- Removed problematic Font Awesome kit link, relying on CDN CSS for icons -->
     <script src="https://js.stripe.com/v3/"></script>
-    <!-- Include imagesLoaded and Masonry via CDN -->
     <script src="https://unpkg.com/imagesloaded@5/imagesloaded.pkgd.min.js"></script>
     <script src="https://unpkg.com/masonry-layout@4/dist/masonry.pkgd.min.js"></script>
-    <!-- Add marked.js for Markdown parsing -->    
     <script src="/js/marked.min.js"></script>
-    
 <style>
     /* Base Body Styles */
     body {
