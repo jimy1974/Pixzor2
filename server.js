@@ -365,7 +365,8 @@ app.post('/api/add-generated-image', async (req, res) => {
       modelId,
       width,
       height,
-      apiResponseId
+      apiResponseId,
+      isPublic = true // Default to true if not provided
     } = req.body;
 
     if (!userId || !contentUrl || !prompt) {
@@ -383,11 +384,11 @@ app.post('/api/add-generated-image', async (req, res) => {
       width,
       height,
       apiResponseId,
-      isPublic: false,
-      tokenCost: 1 // Adjust based on your pricing
+      isPublic, // Use payload value or default true
+      tokenCost: 1
     });
 
-    console.log(`[API Add Image] Saved image record with ID: ${newContent.id}`);
+    console.log(`[API Add Image] Saved image record with ID: ${newContent.id}, isPublic: ${newContent.isPublic}`);
     res.json({ success: true, imageId: newContent.id });
   } catch (error) {
     console.error('[API Add Image] Error:', error.stack);
