@@ -350,50 +350,72 @@ app.get('/api/library/chats', async (req, res) => {
 
 
 app.post('/api/add-generated-image', async (req, res) => {
-  try {
-    const token = req.headers.authorization?.split('Bearer ')[1];
-    if (process.env.WEBSITE_API_TOKEN && token !== process.env.WEBSITE_API_TOKEN) {
-      console.log('[API Add Image] Unauthorized access attempt');
-      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    try {
+        const token = req.headers.authorization?.split('Bearer ')[1];
+        if (process.env.WEBSITE_API_TOKEN && token !== process.env.WEBSITE_API_TOKEN) {
+            console.log('[API Add Image] Unauthorized access attempt', { token: token?.slice(0, 8) });
+            return res.status(401).json({ success: false, error: 'Unauthorized' });
+        }
+
+        const {
+            userId,
+            contentUrl,
+            prompt,
+            modelUsed,
+            modelId,
+            width,
+            height,
+            apiResponseId,
+            isPublic = true
+        } = req.body;
+
+        console.log('[API Add Image] Received payload:', {
+            userId,
+            contentUrl,
+            prompt: prompt?.length > 50 ? prompt.substring(0, 50) + '...' : prompt,
+            modelUsed,
+            modelId,
+            width,
+            height,
+            apiResponseId,
+            isPublic
+        });
+
+        if (!userId || !contentUrl || !prompt) {
+            console.log('[API Add Image] Missing required fields:', req.body);
+            return res.status(400).json({ success: false, error: 'Missing required fields' });
+        }
+
+        const newContent = await GeneratedContent.create({
+            userId,
+            type: 'image',
+            contentUrl,
+            prompt,
+            modelUsed,
+            modelId,
+            width,
+            height,
+            apiResponseId,
+            isPublic,
+            tokenCost: 1
+        });
+
+        console.log(`[API Add Image] Saved image record with ID: ${newContent.id}, isPublic: ${newContent.isPublic}`);
+        return res.json({ success: true, imageId: newContent.id });
+    } catch (error) {
+        console.error('[API Add Image] Error:', {
+            message: error.message,
+            name: error.name,
+            stack: error.stack,
+            payload: {
+                userId: req.body.userId,
+                contentUrl: req.body.contentUrl,
+                prompt: req.body.prompt?.length > 50 ? req.body.prompt.substring(0, 50) + '...' : req.body.prompt,
+                isPublic: req.body.isPublic
+            }
+        });
+        return res.status(500).json({ success: false, error: error.message || 'Failed to add image to database' });
     }
-
-    const {
-      userId,
-      contentUrl,
-      prompt,
-      modelUsed,
-      modelId,
-      width,
-      height,
-      apiResponseId,
-      isPublic = true // Default to true if not provided
-    } = req.body;
-
-    if (!userId || !contentUrl || !prompt) {
-      console.log('[API Add Image] Missing required fields:', req.body);
-      return res.status(400).json({ success: false, error: 'Missing required fields' });
-    }
-
-    const newContent = await GeneratedContent.create({
-      userId,
-      type: 'image',
-      contentUrl,
-      prompt,
-      modelUsed,
-      modelId,
-      width,
-      height,
-      apiResponseId,
-      isPublic, // Use payload value or default true
-      tokenCost: 1
-    });
-
-    console.log(`[API Add Image] Saved image record with ID: ${newContent.id}, isPublic: ${newContent.isPublic}`);
-    res.json({ success: true, imageId: newContent.id });
-  } catch (error) {
-    console.error('[API Add Image] Error:', error.stack);
-    res.status(500).json({ success: false, error: 'Failed to add image to database' });
-  }
 });
 
 const { downloadJsonFromGcs } = require('./utils/gcsUtils');
