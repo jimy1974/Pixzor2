@@ -1,11 +1,19 @@
+// public/js/gallery.js
+
+// Ensure these global variables are defined at the very top of your core.js
+// so gallery.js can access them.
+// window.FILES_LOAD_LIMIT = 6;
+// window.GALLERY_LOAD_LIMIT = 6; // Set this to 6 for the gallery if you want initial 6 images
+
 let page = 1;
 let isLoading = false;
 let hasMoreImages = true;
 let currentContentId = null; // For the modal
 let masonryInstance = null; // Hold masonry instance globally for this module
 let imageListObserver = null; // Hold observer instance
-//let galleryGridObserver = null; // Hold observer instance
 
+// NEW: Global reference for the gallery scroll handler for cleanup
+window.currentGalleryScrollHandler = null; // Defined in core.js for cleanup, but set here
 
 // --- Toast Function (Ensure core.js provides showToast or define it here) ---
 // Assuming showToast is globally available from core.js
@@ -97,7 +105,6 @@ async function loadComments(contentId) {
         }
     } catch (error) {
         console.error('Error loading comments:', error);
-        commentsList.innerHTML = '<li class="text-red-500">Error loading comments.</li>';
         if(typeof window.showToast === 'function') window.showToast('Failed to load comments.', 'error');
     }
 }
@@ -247,9 +254,10 @@ window.openCommentsModal = function(contentId, imageUrl, promptText = 'Loading..
                         if(typeof window.showToast === 'function') window.showToast(result.message || 'Image deleted successfully.', 'success');
                         const elementToRemove = document.getElementById(`image-card-${contentIdToDelete}`) || document.querySelector(`.file-card[data-id="${contentIdToDelete}"]`);
                         if (elementToRemove) {
-                            if (window.masonryInstance && typeof window.masonryInstance.remove === 'function') {
-                                window.masonryInstance.remove(elementToRemove);
-                                window.masonryInstance.layout();
+                            // When deleting from gallery, it should affect masonryInstance, not filesMasonryInstance
+                            if (masonryInstance && typeof masonryInstance.remove === 'function') {
+                                masonryInstance.remove(elementToRemove);
+                                masonryInstance.layout();
                             }
                             elementToRemove.remove();
                         }
@@ -312,7 +320,6 @@ function escapeHTML(str) {
 // --- Image Card Creation ---
 function createImageCard(image) {
     const imageCard = document.createElement('div');
-    // REMOVED: opacity-0 from here. The CSS for .image-card img handles initial opacity.
     imageCard.classList.add('image-card', 'relative', 'group', 'cursor-pointer');
     imageCard.dataset.id = image.id;
     imageCard.id = `image-card-${image.id}`;
@@ -370,7 +377,8 @@ async function loadImages() {
     }
 
     try {
-        const response = await fetch(`/api/gallery-content?page=${page}`);
+        // FIXED: Add the limit parameter to the fetch URL for the gallery
+        const response = await fetch(`/api/gallery-content?page=${page}&limit=${window.GALLERY_LOAD_LIMIT}`); // Use global limit
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
         const images = data.items;
@@ -379,7 +387,7 @@ async function loadImages() {
         if (!imageList || !masonryInstance) {
              console.error('[gallery.js] loadImages: Image list or Masonry instance not found.');
              if(loadingIndicator) loadingIndicator.style.display = 'none';
-             isLoading = false;
+             isLoading = false; // Ensure isLoading is reset if elements are missing
              return;
         }
 
@@ -448,13 +456,9 @@ async function loadImages() {
             loadingIndicator.style.display = 'block'; // Keep visible to show the error message
         }
         hasMoreImages = false; // Stop further attempts on error
-    } finally {
-        // isLoading is now set within the imagesLoaded callback, or on error.
-        // This finally block ensures it's set on direct errors not caught by imagesLoaded.
-        if (isLoading) { // If an error occurred before imagesLoaded was called
-             isLoading = false;
-        }
+        isLoading = false; // Also reset isLoading here on error
     }
+    // Removed the finally block because its logic was prematurely resetting isLoading.
 }
 
 
@@ -510,7 +514,7 @@ window.initializeGallery = async function() {
     }
 
     // Load the first batch of images
-    await loadImages();
+    loadImages(); // Removed await here so activateGalleryFeatures can run immediately
 
     // This function now (re)attaches the scroll listener and re-initializes like buttons
     // for the gallery, ensuring listeners are always fresh.
@@ -518,6 +522,7 @@ window.initializeGallery = async function() {
 };
 
 // --- Function to set up observers and dynamic features ---
+// Consolidated activateGalleryFeatures (there were two copies at the end)
 function activateGalleryFeatures() {
     debugLog('[Gallery.js] activateGalleryFeatures called.');
 
@@ -531,17 +536,21 @@ function activateGalleryFeatures() {
 
     if (imageListElement) {
         debugLog('[Gallery.js] #image-list found, initializing like buttons and setting up MutationObserver.');
-        if (typeof initializeLikeButtons === 'function') initializeLikeButtons();
+        if (typeof initializeLikeButtons === 'function') initializeLikeButtons(); // Re-initialize for initial batch
 
         // Create a new MutationObserver
         imageListObserver = new MutationObserver((mutationsList, observer) => {
             for(const mutation of mutationsList) {
                 if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                    debugLog('[Gallery.js] #image-list childList mutated, new nodes added. Re-initializing like buttons.');
-                    // Masonry layout and image opacity setting is now handled within the imagesLoaded callback of loadImages.
-                    // So we don't need to re-layout Masonry here directly.
-                    // initializeLikeButtons is good here because it will catch new elements added by any means.
+                    debugLog('[Gallery.js] #image-list childList mutated, new nodes added. Re-initializing like buttons and laying out masonry.');
+                    // Re-initialize like buttons for new items
                     if (typeof initializeLikeButtons === 'function') initializeLikeButtons();
+                    // Masonry layout is handled within loadImages, but a fallback here is fine.
+                    // If Masonry layout is ONLY happening in imagesLoaded.on('always'),
+                    // this line might not be needed or could be moved.
+                    // However, for robustness, keeping it here won't hurt, but the `imagesLoaded`
+                    // method is more precise.
+                    if (masonryInstance) masonryInstance.layout();
                     break; // Only need to process once per mutation batch
                 }
             }
@@ -552,82 +561,40 @@ function activateGalleryFeatures() {
         console.warn('[Gallery.js] #image-list not found for observer setup in activateGalleryFeatures.');
     }
 
-    const scrollContainer = document.getElementById('content-area');
-    if (scrollContainer) {
-        // To prevent multiple scroll listeners, remove before adding.
-        scrollContainer.removeEventListener('scroll', galleryScrollHandler);
-        scrollContainer.addEventListener('scroll', galleryScrollHandler);
-        debugLog('[gallery.js] Scroll listener attached to #content-area for infinite scroll.');
-    } else {
-        console.warn('[gallery.js] Scroll container #content-area not found for infinite scroll.');
+    // FIXED: Attach scroll listener to WINDOW for gallery as well, not contentArea
+    // Make sure to store the function in window.currentGalleryScrollHandler
+    // This allows core.js to clean it up when navigating away.
+    if (window.currentGalleryScrollHandler) { // Check if already set by this or another call
+        window.removeEventListener('scroll', window.currentGalleryScrollHandler);
+        debugLog('[gallery.js] Removed previous galleryScrollHandler from window.');
     }
+    window.currentGalleryScrollHandler = galleryScrollHandler; // Store the function reference
+    window.addEventListener('scroll', window.currentGalleryScrollHandler); // Attach to window
+    debugLog('[gallery.js] Scroll listener attached to window for gallery infinite scroll.');
 }
-window.activateGalleryFeatures = activateGalleryFeatures; // Make it globally accessible
+// Removed redundant window.activateGalleryFeatures = activateGalleryFeatures; here
 
+// galleryScrollHandler also needs to check document.documentElement
 function galleryScrollHandler() {
-    const scrollContainer = document.getElementById('content-area');
-    if (!scrollContainer) return;
-    // Trigger when 600px from the bottom
-    if (scrollContainer.scrollTop + scrollContainer.clientHeight >= scrollContainer.scrollHeight - 600) {
+    // FIXED: Use document.documentElement and window.innerHeight
+    if (!masonryInstance) return; // Only run if masonry is initialized
+
+    debugLog(`[gallery.js] Document Scroll: scrollTop=${document.documentElement.scrollTop}, clientHeight=${window.innerHeight}, scrollHeight=${document.documentElement.scrollHeight}`);
+
+    // FIXED: Use a smaller threshold, consistent with files, or adjust as needed.
+    // Assuming 300px works well for your content.
+    if (document.documentElement.scrollTop + window.innerHeight >= document.documentElement.scrollHeight - 300) { // Changed scroll targets and threshold
         if (!isLoading && hasMoreImages) {
             debugLog('[gallery.js] Near bottom, loading more images...');
             loadImages();
+        } else {
+            debugLog('[gallery.js] Not loading: isLoading=', isLoading, 'hasMoreImages=', hasMoreImages);
         }
     }
 }
 
 
-// --- Function to set up observers and dynamic features ---
-function activateGalleryFeatures() {
-    debugLog('[Gallery.js] activateGalleryFeatures called.');
-
-    const imageListElement = document.getElementById('image-list');
-    // Assuming gallery-grid is the same as image-list for observer purposes or not used for likes.
-    // If #gallery-grid is a distinct parent that also gets new likeable items, it would need its own observer.
-
-    if (imageListObserver) imageListObserver.disconnect(); // Disconnect previous if any
-
-    if (imageListElement) {
-        debugLog('[Gallery.js] #image-list found, initializing like buttons and setting up MutationObserver.');
-        if (typeof initializeLikeButtons === 'function') initializeLikeButtons();
-        
-        imageListObserver = new MutationObserver(() => {
-            debugLog('[Gallery.js] #image-list mutated, re-initializing like buttons.');
-            if (typeof initializeLikeButtons === 'function') initializeLikeButtons();
-            if (masonryInstance) masonryInstance.layout(); 
-        });
-        imageListObserver.observe(imageListElement, { childList: true, subtree: true });
-    } else {
-        console.warn('[Gallery.js] #image-list not found for observer setup in activateGalleryFeatures.');
-    }
-    
-    const scrollContainer = document.getElementById('content-area'); 
-    if (scrollContainer) {
-        // To prevent multiple scroll listeners, remove before adding.
-        scrollContainer.removeEventListener('scroll', galleryScrollHandler); 
-        scrollContainer.addEventListener('scroll', galleryScrollHandler);
-        debugLog('[gallery.js] Scroll listener attached to #content-area for infinite scroll.');
-    } else {
-        console.warn('[gallery.js] Scroll container #content-area not found for infinite scroll.');
-    }
-}
-window.activateGalleryFeatures = activateGalleryFeatures;
-
-function galleryScrollHandler() {
-    const scrollContainer = document.getElementById('content-area');
-    if (!scrollContainer) return;
-    if (scrollContainer.scrollTop + scrollContainer.clientHeight >= scrollContainer.scrollHeight - 300) {
-        if (!isLoading && hasMoreImages) {
-            debugLog('[gallery.js] Near bottom, loading more images...');
-            loadImages();
-        }
-    }
-}
-
-// --- Like Button Initialization ---
-// ... (rest of your gallery.js code) ...
-
-// --- Like Button Initialization ---
+// --- Like Button Initialization (consolidated to one function) ---
 function initializeLikeButtons() {
     debugLog('[gallery.js] Initializing like buttons...');
     const likeButtons = document.querySelectorAll('.like-btn');
@@ -660,9 +627,6 @@ function initializeLikeButtons() {
 
             if (isCurrentlyLiked) { // If currently liked, user wants to UNLIKE
                 method = 'DELETE';
-                // DELETE requests typically do not have a body, or an empty one
-                // You can omit the body property entirely or set it to undefined
-                // if your server doesn't strictly require it.
                 requestBody = {}; // Empty body for DELETE
             } else { // If not currently liked, user wants to LIKE
                 method = 'POST';
@@ -728,7 +692,4 @@ function initializeLikeButtons() {
     });
 }
 
-window.initializeLikeButtons = initializeLikeButtons;
-
-// No top-level or DOMContentLoaded observer setup here.
-// It's handled by activateGalleryFeatures, called by initializeGallery.
+window.initializeLikeButtons = initializeLikeButtons; // Make globally available
