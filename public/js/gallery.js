@@ -4,7 +4,8 @@ let hasMoreImages = true;
 let currentContentId = null; // For the modal
 let masonryInstance = null; // Hold masonry instance globally for this module
 let imageListObserver = null; // Hold observer instance
-let galleryGridObserver = null; // Hold observer instance
+//let galleryGridObserver = null; // Hold observer instance
+
 
 // --- Toast Function (Ensure core.js provides showToast or define it here) ---
 // Assuming showToast is globally available from core.js
@@ -311,14 +312,15 @@ function escapeHTML(str) {
 // --- Image Card Creation ---
 function createImageCard(image) {
     const imageCard = document.createElement('div');
+    // REMOVED: opacity-0 from here. The CSS for .image-card img handles initial opacity.
     imageCard.classList.add('image-card', 'relative', 'group', 'cursor-pointer');
     imageCard.dataset.id = image.id;
     imageCard.id = `image-card-${image.id}`;
 
     imageCard.innerHTML = `
-        <img src="${image.thumbnailUrl ?? image.contentUrl}" 
-             alt="${image.prompt?.substring(0, 50) || 'AI Content'}..." 
-             class="w-full rounded-lg cursor-pointer block object-cover transition-transform duration-200 ease-in-out group-hover:scale-105" 
+        <img src="${image.thumbnailUrl ?? image.contentUrl}"
+             alt="${image.prompt?.substring(0, 50) || 'AI Content'}..."
+             class="w-full rounded-lg cursor-pointer block object-cover transition-transform duration-200 ease-in-out group-hover:scale-105"
              loading="lazy" />
         <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity duration-200 ease-in-out rounded-lg"></div>
         ${window.isLoggedIn && image.isOwner ? `
@@ -346,10 +348,26 @@ function createImageCard(image) {
 
 // --- Load Images Function (for infinite scroll) ---
 async function loadImages() {
-    if (isLoading || !hasMoreImages) return;
+    if (isLoading || !hasMoreImages) {
+        debugLog('[gallery.js] loadImages: Skipping, isLoading:', isLoading, 'hasMoreImages:', hasMoreImages);
+        const loadingIndicator = document.getElementById('loading-indicator');
+        if (loadingIndicator) {
+            if (!hasMoreImages) {
+                loadingIndicator.textContent = 'No more images.';
+                loadingIndicator.style.display = 'block'; // Keep visible to show the message
+            } else {
+                loadingIndicator.style.display = 'none'; // Hide if still loading but shouldn't fire another load
+            }
+        }
+        return;
+    }
+
     isLoading = true;
-    const loadingIndicator = document.getElementById('loading-indicator'); 
-    if(loadingIndicator) loadingIndicator.style.display = 'block';
+    const loadingIndicator = document.getElementById('loading-indicator');
+    if (loadingIndicator) {
+        loadingIndicator.style.display = 'block';
+        loadingIndicator.textContent = 'Loading more...'; // Or "Loading images..." for first load
+    }
 
     try {
         const response = await fetch(`/api/gallery-content?page=${page}`);
@@ -358,19 +376,20 @@ async function loadImages() {
         const images = data.items;
         const imageList = document.getElementById('image-list');
 
-        if (!imageList || !masonryInstance) { 
+        if (!imageList || !masonryInstance) {
              console.error('[gallery.js] loadImages: Image list or Masonry instance not found.');
              if(loadingIndicator) loadingIndicator.style.display = 'none';
              isLoading = false;
-             return; 
+             return;
         }
 
         if (images.length === 0) {
              if (page === 1) imageList.innerHTML = '<p class="text-white text-center col-span-full">No images found.</p>';
              else if(loadingIndicator) loadingIndicator.textContent = 'No more images.';
-            hasMoreImages = false;
+            hasMoreImages = false; // Set to false when no items are returned
             if(loadingIndicator && page > 1) { /* Keep visible */ } else if (loadingIndicator) { loadingIndicator.style.display = 'none'; }
-            return;
+            isLoading = false; // Reset loading state
+            return; // Early exit on no items
         }
 
         const fragment = document.createDocumentFragment();
@@ -383,32 +402,60 @@ async function loadImages() {
 
         imageList.appendChild(fragment);
 
-        imagesLoaded(imageList).on('always', function() {
-            if (masonryInstance) { 
+        // Store hasMore locally so we can use it in the imagesLoaded callback
+        const _hasMore = data.hasMore;
+
+        // CRITICAL FIX: Update state (page, hasMoreImages, isLoading) AFTER images are loaded and Masonry lays out
+        imagesLoaded(newItems).on('always', function() {
+            if (masonryInstance) {
                 masonryInstance.appended(newItems);
                 masonryInstance.layout();
+                // Make images visible after Masonry has positioned them
+                newItems.forEach(item => {
+                    const img = item.querySelector('img');
+                    if(img) img.style.opacity = '1'; // This is the line that makes images visible!
+                });
+            }
+
+            // --- CRITICAL CHANGE: Update hasMoreImages and loading indicator *after* images are visible ---
+            hasMoreImages = _hasMore; // Update global state based on fetched data
+
+            if (loadingIndicator) {
+                if (hasMoreImages) {
+                    loadingIndicator.style.display = 'none'; // Hide if more pages are expected
+                } else {
+                    loadingIndicator.textContent = 'No more images.'; // Show final message
+                    loadingIndicator.style.display = 'block'; // Keep visible to show this final message
+                }
+            }
+
+            // Only increment page and set isLoading to false *after* everything is visible and Masonry is done.
+            page++;
+            isLoading = false; // Reset loading state
+            debugLog('[gallery.js] Images loaded, Masonry laid out. Page:', page, 'hasMoreImages:', hasMoreImages);
+
+            // Re-initialize like buttons for newly added elements
+            if (typeof window.initializeLikeButtons === 'function') {
+                window.initializeLikeButtons();
             }
         });
-
-        hasMoreImages = data.hasMore;
-        if (hasMoreImages) page++;
-        else if(loadingIndicator) loadingIndicator.textContent = 'No more images.';
 
     } catch (error) {
         console.error(`Error loading images:`, error);
         if(typeof window.showToast === 'function') window.showToast('An error occurred while loading images.', 'error');
-        if(loadingIndicator) loadingIndicator.textContent = 'Error loading images.';
-        hasMoreImages = false; 
+        if(loadingIndicator) {
+            loadingIndicator.textContent = `Error loading images: ${error.message || 'An unknown error occurred'}`;
+            loadingIndicator.style.display = 'block'; // Keep visible to show the error message
+        }
+        hasMoreImages = false; // Stop further attempts on error
     } finally {
-        isLoading = false;
-        if(loadingIndicator && (loadingIndicator.textContent === 'No more images.' || loadingIndicator.textContent === 'Error loading images.')) {
-            // Keep visible
-        } else if (loadingIndicator) {
-            loadingIndicator.style.display = 'none';
+        // isLoading is now set within the imagesLoaded callback, or on error.
+        // This finally block ensures it's set on direct errors not caught by imagesLoaded.
+        if (isLoading) { // If an error occurred before imagesLoaded was called
+             isLoading = false;
         }
     }
 }
-
 
 
 window.initializeGallery = async function() {
@@ -427,24 +474,22 @@ window.initializeGallery = async function() {
     if (masonryInstance) {
         masonryInstance.destroy(); // Destroy previous Masonry instance
         masonryInstance = null; // Clear reference
+        debugLog('[gallery.js] Masonry instance destroyed.');
     }
     if (imageListObserver) {
         imageListObserver.disconnect(); // Disconnect previous MutationObserver
         imageListObserver = null; // Clear reference
+        debugLog('[gallery.js] Image list observer disconnected.');
     }
-    // If you ever used galleryGridObserver, disconnect it here too.
-    // if (galleryGridObserver) {
-    //     galleryGridObserver.disconnect();
-    //     galleryGridObserver = null;
-    // }
 
     // Clear content area and set up initial structure for gallery
     contentArea.innerHTML = `
-        <div id="gallery-controls" class="mb-4"></div>
+        <h2 class="text-xl font-semibold text-white mb-4 p-2 border-b border-gray-600">Public Gallery</h2>
         <div id="image-list" class="gallery-grid" style="position: relative;">
             <div class="grid-sizer"></div>
+            <!-- Initial placeholder elements (optional, can be done with server-side render or JavaScript) -->
         </div>
-        <div id="loading-indicator" class="text-center py-4 text-gray-400" style="display: none;">Loading more images...</div>
+        <div id="loading-indicator" class="text-center py-4 text-gray-400" style="display: none;">Loading images...</div>
     `;
 
     const imageList = document.getElementById('image-list');
@@ -460,6 +505,7 @@ window.initializeGallery = async function() {
     } else {
         console.error('[gallery.js] Masonry could not be initialized. image-list or Masonry library missing.');
         if(typeof window.showToast === 'function') window.showToast('Masonry library not loaded for gallery. Please refresh.', 'error');
+        contentArea.innerHTML = '<p class="text-center text-red-500 p-4">Error: Required libraries not loaded. Please refresh.</p>';
         return; // Exit if Masonry is critical and not available
     }
 
@@ -471,6 +517,64 @@ window.initializeGallery = async function() {
     activateGalleryFeatures();
 };
 
+// --- Function to set up observers and dynamic features ---
+function activateGalleryFeatures() {
+    debugLog('[Gallery.js] activateGalleryFeatures called.');
+
+    const imageListElement = document.getElementById('image-list');
+
+    // Disconnect previous observer if any to prevent duplicates
+    if (imageListObserver) {
+        imageListObserver.disconnect();
+        debugLog('[Gallery.js] Disconnected previous imageListObserver.');
+    }
+
+    if (imageListElement) {
+        debugLog('[Gallery.js] #image-list found, initializing like buttons and setting up MutationObserver.');
+        if (typeof initializeLikeButtons === 'function') initializeLikeButtons();
+
+        // Create a new MutationObserver
+        imageListObserver = new MutationObserver((mutationsList, observer) => {
+            for(const mutation of mutationsList) {
+                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                    debugLog('[Gallery.js] #image-list childList mutated, new nodes added. Re-initializing like buttons.');
+                    // Masonry layout and image opacity setting is now handled within the imagesLoaded callback of loadImages.
+                    // So we don't need to re-layout Masonry here directly.
+                    // initializeLikeButtons is good here because it will catch new elements added by any means.
+                    if (typeof initializeLikeButtons === 'function') initializeLikeButtons();
+                    break; // Only need to process once per mutation batch
+                }
+            }
+        });
+        imageListObserver.observe(imageListElement, { childList: true, subtree: true });
+        debugLog('[Gallery.js] New MutationObserver attached to #image-list.');
+    } else {
+        console.warn('[Gallery.js] #image-list not found for observer setup in activateGalleryFeatures.');
+    }
+
+    const scrollContainer = document.getElementById('content-area');
+    if (scrollContainer) {
+        // To prevent multiple scroll listeners, remove before adding.
+        scrollContainer.removeEventListener('scroll', galleryScrollHandler);
+        scrollContainer.addEventListener('scroll', galleryScrollHandler);
+        debugLog('[gallery.js] Scroll listener attached to #content-area for infinite scroll.');
+    } else {
+        console.warn('[gallery.js] Scroll container #content-area not found for infinite scroll.');
+    }
+}
+window.activateGalleryFeatures = activateGalleryFeatures; // Make it globally accessible
+
+function galleryScrollHandler() {
+    const scrollContainer = document.getElementById('content-area');
+    if (!scrollContainer) return;
+    // Trigger when 600px from the bottom
+    if (scrollContainer.scrollTop + scrollContainer.clientHeight >= scrollContainer.scrollHeight - 600) {
+        if (!isLoading && hasMoreImages) {
+            debugLog('[gallery.js] Near bottom, loading more images...');
+            loadImages();
+        }
+    }
+}
 
 
 // --- Function to set up observers and dynamic features ---

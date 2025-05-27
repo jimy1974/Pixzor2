@@ -426,18 +426,7 @@
         font-style: italic; 
     }
 
-    /* Image Loading Placeholder */
-    .image-loading { 
-        background: #4b5563; 
-        width: 150px; 
-        height: 150px; 
-        border-radius: 4px; 
-        display: flex; 
-        align-items: center; 
-        justify-content: center; 
-        color: #d1d5db; 
-        font-style: italic; 
-    }
+  
 
     /* Image Modal */
     .image-modal img { 
@@ -445,60 +434,18 @@
         max-height: 90vh; 
     }
 
-    /* Gallery CSS */
-    #image-list {
-        width: 100%;
-        margin: 0 auto;
-        position: relative;
+  
+    @media (max-width: 768px) {
+        #comments-modal .bg-white {
+            flex-direction: column;
+        }
+        #comments-modal .md\:w-2\/3,
+        #comments-modal .md\:w-1\/3 {
+            width: 100%;
+        }
     }
-    .grid-sizer,
-    .image-card,
-    .file-card { /* Add .file-card here */
-        width: calc(33.333% - 10px); /* Apply consistent width */
-        margin-bottom: 10px;
-    }
-    .image-card, /* Keep specific .image-card styles if any, or merge if identical */
-    .file-card { /* Keep specific .file-card styles if any, or merge if identical */
-        float: left;
-        margin-right: 10px;
-    }
-    .image-card img {
-        display: block;
-        width: 100%;
-        height: auto;
-        border-radius: 0.5rem;
-        transition: transform 0.2s ease-in-out;
-    }
-    .image-card:hover img {
-        transform: scale(1.02);
-    }
-    .like-button {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        background: rgba(0, 0, 0, 0.5);
-        border: none;
-        border-radius: 50%;
-        width: 36px;
-        height: 36px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: background-color 0.2s;
-    }
-    .like-button:hover {
-        background: rgba(0, 0, 0, 0.7);
-    }
-    .like-button i {
-        color: white;
-        font-size: 1.2rem;
-    }
-    .like-button i.liked {
-        color: #ef4444;
-    }
-
-    /* Comments Modal */
+    
+     /* Comments Modal */
     #comments-modal {
         background-color: rgba(0, 0, 0, 0.75);
     }
@@ -518,30 +465,7 @@
         max-height: 300px;
         overflow-y: auto;
     }
-
-    /* Responsive Gallery */
-    @media (max-width: 1024px) {
-        .grid-sizer,
-        .image-card {
-            width: calc(50% - 10px);
-        }
-    }
-    @media (max-width: 640px) {
-        .grid-sizer,
-        .image-card {
-            width: calc(100% - 10px);
-        }
-    }
-    @media (max-width: 768px) {
-        #comments-modal .bg-white {
-            flex-direction: column;
-        }
-        #comments-modal .md\:w-2\/3,
-        #comments-modal .md\:w-1\/3 {
-            width: 100%;
-        }
-    }
-
+    
     /* Fullscreen Modal */
     #fullscreen-modal {
         background-color: rgba(0, 0, 0, 0.9);

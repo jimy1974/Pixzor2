@@ -19,15 +19,14 @@ const { Op } = require('sequelize'); // IMPORTANT: Make sure Op is imported
 // This is the route for 'My Files'
 //router.get('/files', isAuthenticated, async (req, res) => {
 router.get('/files', isAuthenticated, async (req, res) => {
-    
     const userId = req.user.id;
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 6; // Default to 24 items per page for user files
+    // CHANGE THIS LINE: Set a more appropriate default limit
+    const limit = parseInt(req.query.limit) || 24; // Changed from 6 to 24 (or your desired number)
     const offset = (page - 1) * limit;
 
     console.log(`[API Files] User ${userId} fetching page ${page}, limit ${limit}`);
-    
-     
+
     try {
         // IMPORTANT: Confirm 'contentUrl' is the actual column name in your 'GeneratedContent' model.
         // If your column is named 'imageUrl' in the DB model, change 'contentUrl' to 'imageUrl' here.

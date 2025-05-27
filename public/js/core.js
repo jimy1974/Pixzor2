@@ -10,8 +10,11 @@ window.debugLog = (...args) => {
 window.filesPage = 1;
 window.filesIsLoading = false;
 window.filesHasMoreImages = true;
+window.FILES_LOAD_LIMIT = 6;
+window.GALLERY_LOAD_LIMIT = 6; 
 window.filesMasonryInstance = null; // Separate Masonry instance for files
 window.currentFilesScrollHandler = null; // To store and remove 
+
 
 // Debug: Confirm script is loading
 debugLog('[core.js] Script loaded at:', new Date().toISOString());
@@ -328,6 +331,7 @@ try {
     
     
     
+
 // Sidebar Logic
 try {
     const sidebarItems = document.querySelectorAll('.sidebar-item');
@@ -342,7 +346,7 @@ try {
         window.showToast('Content area not found. Please refresh the page.', 'error');
     }
 
-    // Function to load chat tab partial
+    // Function to load chat tab partial (no change)
     const loadChatTab = async (section, activeTab = 'create-images') => {
       debugLog(`[core.js] loadChatTab called with section=${section}, activeTab=${activeTab}`);
 
@@ -485,12 +489,32 @@ try {
                 // Reset new session flag when any sidebar item loads content directly (not chat/create tabs)
                 window.isContentAreaDisplayingNewSession = false;
 
+                // --- CRITICAL FIX: Remove ALL existing global scroll handlers before loading new content ---
+                if (window.currentFilesScrollHandler) {
+                    window.removeEventListener('scroll', window.currentFilesScrollHandler);
+                    window.currentFilesScrollHandler = null;
+                    debugLog('[core.js] Removed previous files scroll handler from window.');
+                }
+                if (window.currentGalleryScrollHandler) { // Assuming gallery.js uses window.currentGalleryScrollHandler
+                    window.removeEventListener('scroll', window.currentGalleryScrollHandler);
+                    window.currentGalleryScrollHandler = null;
+                    debugLog('[core.js] Removed previous gallery scroll handler from window.');
+                }
+                // Also remove the contentArea click handler that's specific to 'files' for safety.
+                if (window.currentFilesClickHandler) {
+                    contentArea.removeEventListener('click', window.currentFilesClickHandler);
+                    window.currentFilesClickHandler = null;
+                    debugLog('[core.js] Removed previous files click handler from contentArea.');
+                }
+                // --- END CRITICAL FIX ---
+
+
                 // Load section content
                 if (section === 'home') {
                     window.location.href = '/';
                     return;
                 } else if (section === 'files') {
-                                 
+                
                     // Reset pagination state for files when navigating to it
                     window.filesPage = 1;
                     window.filesIsLoading = false;
@@ -498,6 +522,7 @@ try {
 
                     // Clear content area and set up initial structure for files
                     contentArea.innerHTML = `
+                        <h2 class="text-xl font-semibold text-white mb-4 p-2 border-b border-gray-600">Your Files</h2>
                         <p id="initial-files-loading" class="text-center text-gray-400 p-4">Loading files...</p>
                         <div id="file-list" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 p-4">
                             <div class="grid-sizer"></div>
@@ -511,6 +536,7 @@ try {
                         if (window.filesMasonryInstance) { // Destroy previous instance if it exists
                             window.filesMasonryInstance.destroy();
                             window.filesMasonryInstance = null; // Clear reference
+                            debugLog('[core.js] Masonry instance for files destroyed.');
                         }
                         window.filesMasonryInstance = new Masonry(fileListElement, {
                             itemSelector: '.file-card',
@@ -519,88 +545,100 @@ try {
                             percentPosition: true,
                             initLayout: true // Perform initial layout when initialized
                         });
+                        debugLog('[core.js] Masonry initialized for files.');
                     } else {
                         console.error('[core.js] Masonry could not be initialized for files. Masonry library missing or element not found.');
                         window.showToast('Masonry library not loaded. Please refresh.', 'error');
-                        contentArea.innerHTML = '<p class="text-center text-red-500 p-4">Error: Required libraries not loaded. Please refresh.</p>';
+                        // Display error message directly in contentArea if Masonry is critical and fails to init
+                        contentArea.innerHTML = `
+                            <h2 class="text-xl font-semibold text-white mb-4 p-2 border-b border-gray-600">Your Files</h2>
+                            <p class="text-center text-red-500 p-4">Error: Required libraries not loaded. Please refresh.</p>
+                        `;
                         return;
                     }
 
                     // --- Delegated event listener for file-card clicks and toggle-public-btn ---
-                    // Make sure this part is still outside loadUserFiles, attached once.
-                    if (window.currentFilesScrollHandler) {
-                        contentArea.removeEventListener('scroll', window.currentFilesScrollHandler);
-                    }
-                    if (window.currentFilesClickHandler) {
-                        contentArea.removeEventListener('click', window.currentFilesClickHandler);
-                    }
+                    // This event listener will be attached *specifically* for the files section
+                    // and will be removed by the cleanup logic above when another section is clicked.
+                    if (!window.currentFilesClickHandler) { // Only attach if not already attached
+                        const filesClickHandler = (event) => {
+                            const fileCard = event.target.closest('.file-card');
+                            const toggleBtn = event.target.closest('.toggle-public-btn');
 
-                    const filesClickHandler = (event) => {
-                        const fileCard = event.target.closest('.file-card');
-                        const toggleBtn = event.target.closest('.toggle-public-btn');
-
-                        if (toggleBtn) {
-                            const contentId = toggleBtn.dataset.id;
-                            const isPublic = toggleBtn.dataset.public === '1';
-                            fetch(`/api/content/${contentId}`, {
-                                method: 'PATCH',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
-                                },
-                                credentials: 'include',
-                                body: JSON.stringify({ isPublic: !isPublic })
-                            })
-                                .then(response => response.json())
-                                .then(result => {
-                                    if (result.success) {
-                                        toggleBtn.dataset.public = isPublic ? '0' : '1';
-                                        toggleBtn.title = isPublic ? 'Make Public' : 'Make Private';
-                                        toggleBtn.querySelector('i').className = `fas ${isPublic ? 'fa-globe' : 'fa-lock'}`;
-                                        window.showToast(`Image is now ${isPublic ? 'private' : 'public'}.`, 'success');
-                                    } else {
-                                        throw new Error(result.error || 'Failed to update visibility');
-                                    }
+                            if (toggleBtn) {
+                                event.preventDefault(); // Prevent opening modal if button is clicked
+                                const contentId = toggleBtn.dataset.id;
+                                const isPublic = toggleBtn.dataset.public === '1';
+                                fetch(`/api/content/${contentId}`, {
+                                    method: 'PATCH',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                                    },
+                                    credentials: 'include',
+                                    body: JSON.stringify({ isPublic: !isPublic })
                                 })
-                                .catch(error => {
-                                    window.showToast(`Failed to update visibility: ${error.message}`, 'error');
-                                });
-                            return;
-                        }
-
-                        if (fileCard) {
-                            const contentId = fileCard.dataset.id;
-                            const imageUrl = fileCard.querySelector('img')?.src;
-                            if (window.openCommentsModal) {
-                                window.openCommentsModal(contentId, imageUrl);
-                                history.pushState({ contentId, section: 'files', modal: true }, '', `/image/${contentId}`);
-                                document.title = 'Image Details | Pixzor';
-
-                                const modal = document.getElementById('comments-modal');
-                                if (modal) {
-                                    const closeButton = modal.querySelector('.modal-close');
-                                    if (closeButton) {
-                                        const existingCloseListener = modal.dataset.closeListener;
-                                        if (existingCloseListener) {
-                                            closeButton.removeEventListener('click', window[existingCloseListener]);
+                                    .then(response => response.json())
+                                    .then(result => {
+                                        if (result.success) {
+                                            toggleBtn.dataset.public = isPublic ? '0' : '1';
+                                            toggleBtn.title = isPublic ? 'Make Private' : 'Make Public';
+                                            toggleBtn.querySelector('i').className = `fas ${isPublic ? 'fa-lock' : 'fa-globe'}`;
+                                            window.showToast(`Image is now ${isPublic ? 'private' : 'public'}.`, 'success');
+                                        } else {
+                                            throw new Error(result.error || 'Failed to update visibility');
                                         }
-                                        const newCloseListener = () => {
-                                            modal.classList.add('hidden');
-                                            history.replaceState({}, '', '/');
-                                            document.title = 'Pixzor';
-                                        };
-                                        closeButton.addEventListener('click', newCloseListener, { once: true });
-                                        modal.dataset.closeListener = newCloseListener.name || `modalCloseHandler_${contentId}`;
-                                    }
-                                }
-                            } else {
-                                window.showToast('Could not open image details.', 'error');
+                                    })
+                                    .catch(error => {
+                                        window.showToast(`Failed to update visibility: ${error.message}`, 'error');
+                                    });
+                                return;
                             }
-                        }
-                    };
 
-                    contentArea.addEventListener('click', filesClickHandler);
-                    window.currentFilesClickHandler = filesClickHandler;
+                            if (fileCard) {
+                                const contentId = fileCard.dataset.id;
+                                // Use the actual image URL from the img element's src
+                                const imageUrl = fileCard.querySelector('img')?.src;
+                                const promptText = fileCard.dataset.prompt || 'No prompt available.'; // If you store prompt on card dataset
+
+                                if (window.openCommentsModal) {
+                                    window.openCommentsModal(contentId, imageUrl, promptText);
+                                    history.pushState({ contentId, section: 'files', modal: true }, '', `/image/${contentId}`);
+                                    document.title = 'Image Details | Pixzor';
+
+                                    const modal = document.getElementById('comments-modal');
+                                    if (modal) {
+                                        // Make sure modal close button correctly handles history state
+                                        const closeButton = modal.querySelector('#close-comments-modal'); // Use the ID for consistency
+                                        if (closeButton) {
+                                            // Remove any existing listener before adding a new one
+                                            const oldListener = modal._currentCloseListener; // Store listener reference
+                                            if (oldListener) {
+                                                closeButton.removeEventListener('click', oldListener);
+                                            }
+                                            const newCloseListener = () => {
+                                                modal.classList.add('hidden');
+                                                // Only go back if the state was specifically for this modal
+                                                if (history.state && history.state.modal) {
+                                                    history.back(); // Go back to previous state (e.g., /files)
+                                                } else {
+                                                    history.replaceState({}, '', '/'); // Fallback to root
+                                                }
+                                                document.title = 'Pixzor'; // Reset title
+                                            };
+                                            closeButton.addEventListener('click', newCloseListener, { once: true });
+                                            modal._currentCloseListener = newCloseListener; // Store new listener reference
+                                        }
+                                    }
+                                } else {
+                                    window.showToast('Could not open image details.', 'error');
+                                }
+                            }
+                        };
+                        contentArea.addEventListener('click', filesClickHandler);
+                        window.currentFilesClickHandler = filesClickHandler;
+                        debugLog('[core.js] New files click handler attached to contentArea.');
+                    }
 
 
                     // Define the function to load user files
@@ -611,15 +649,15 @@ try {
 
                         // Prevent multiple simultaneous loads or loading when no more items
                         if (window.filesIsLoading || !window.filesHasMoreImages) {
-                            const fileListHasAuthError = fileListElement.innerHTML.includes('Please log in');
-                            const fileListHasGeneralError = fileListElement.innerHTML.includes('Error loading files');
+                            debugLog('[core.js] loadUserFiles: Skipping, filesIsLoading:', window.filesIsLoading, 'filesHasMoreImages:', window.filesHasMoreImages);
+                            const fileListHasAuthError = fileListElement?.innerHTML.includes('Please log in'); // Added optional chaining
+                            const fileListHasGeneralError = fileListElement?.innerHTML.includes('Error loading files'); // Added optional chaining
 
                             if (loadingIndicator) {
                                 if (fileListHasAuthError || fileListHasGeneralError) {
                                     loadingIndicator.style.display = 'none';
                                 } else if (!window.filesHasMoreImages) {
                                     // Only show "No more files" if it's the *actual* final state
-                                    // and not just waiting for images to load.
                                     loadingIndicator.textContent = 'No more files.';
                                     loadingIndicator.style.display = 'block';
                                 }
@@ -634,11 +672,13 @@ try {
                             loadingIndicator.style.display = 'block';
                             loadingIndicator.textContent = 'Loading files...'; // Changed to "Loading files..." for first load
                         }
-                        if (initialLoadingMessage) initialLoadingMessage.style.display = 'none'; // Hide immediate HTML message
+                        if (initialLoadingMessage) initialLoadingMessage.style.display = 'block'; // Ensure initial message is visible during load
+                        debugLog('[core.js] Showing loading indicators for files.');
+
 
                         try {
                             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
-                            const response = await fetch(`/api/files?page=${window.filesPage}`, {
+                            const response = await fetch(`/api/files?page=${window.filesPage}&limit=${window.FILES_LOAD_LIMIT}`, {
                                 method: 'GET',
                                 headers: {
                                     'X-CSRF-Token': csrfToken,
@@ -647,22 +687,27 @@ try {
                                 credentials: 'include'
                             });
 
-                            // Remove initial HTML message once fetch has started successfully
-                            if (initialLoadingMessage) initialLoadingMessage.remove();
+                            // Ensure initial loading message is removed or hidden after successful fetch starts
+                            if (initialLoadingMessage) initialLoadingMessage.style.display = 'none';
+                            debugLog('[core.js] Initial loading message for files hidden after fetch.');
 
                             if (!response.ok) {
-                                if (response.status === 401) {
-                                    throw { isAuthError: true, status: response.status };
-                                }
+                                // If not OK, handle it as an error
                                 const errorData = await response.json().catch(() => ({}));
+                                // Mark as authentication error if status is 401
+                                if (response.status === 401) {
+                                    throw { isAuthError: true, status: response.status, message: errorData.error || 'Authentication required' };
+                                }
                                 throw new Error(errorData.message || `HTTP error! Status: ${response.status}`);
                             }
                             const data = await response.json();
                             const items = data.items;
+                            debugLog(`[core.js] Fetched ${items.length} files for page ${window.filesPage}. Has more: ${data.hasMore}`);
+
 
                             if (items.length === 0) {
                                 if (window.filesPage === 1) { // If no items on first load
-                                    fileListElement.innerHTML = '<p class="text-center text-gray-400 p-4 col-span-full">No files yet.</p>';
+                                    if (fileListElement) fileListElement.innerHTML = '<p class="text-center text-gray-400 p-4 col-span-full">No files yet.</p>'; // Added null check
                                 }
                                 if (loadingIndicator) {
                                     loadingIndicator.textContent = 'No files yet.'; // More appropriate for empty
@@ -674,20 +719,32 @@ try {
                             }
 
                             // If we have items and it was the first page, clear "No files yet." if it was there
-                            if (window.filesPage === 1 && fileListElement.innerHTML.includes('No files yet.')) {
-                                fileListElement.innerHTML = '<div class="grid-sizer"></div>';
+                            if (window.filesPage === 1 && fileListElement?.innerHTML.includes('No files yet.')) { // Added optional chaining
+                                if (fileListElement) fileListElement.innerHTML = '<div class="grid-sizer"></div>'; // Re-add sizer if cleared, added null check
                             }
+
+                            // Ensure fileListElement is valid before appending
+                            if (!fileListElement) {
+                                console.error('[core.js] fileListElement is null, cannot append images. This should not happen if the section is active.');
+                                window.showToast('Error: File list container not found.', 'error');
+                                window.filesHasMoreImages = false;
+                                window.filesIsLoading = false;
+                                return;
+                            }
+
 
                             const fragment = document.createDocumentFragment();
                             const newItems = [];
                             items.forEach(item => {
                                 const fileCard = document.createElement('div');
                                 fileCard.classList.add(
-                                    'file-card', 'relative', 'group', 'cursor-pointer', 'aspect-square',
-                                    'opacity-0', 'transition-opacity', 'duration-300'
+                                    'file-card', 'relative', 'group', 'cursor-pointer', 'aspect-square'
+                                    // Removed 'opacity-0', 'transition-opacity', 'duration-300' from here.
+                                    // The `img` tag inside will handle opacity via CSS and JS.
                                 );
                                 fileCard.dataset.id = item.id;
                                 fileCard.id = `file-card-${item.id}`;
+                                fileCard.dataset.prompt = item.prompt || ''; // Store prompt for modal if needed
 
                                 fileCard.innerHTML = `
                                     <img src="${item.image}" alt="File thumbnail" class="w-full h-full object-cover rounded-lg transition-transform duration-200 ease-in-out group-hover:scale-105" loading="lazy">
@@ -710,7 +767,7 @@ try {
                                 newItems.push(fileCard);
                             });
 
-                            fileListElement.appendChild(fragment);
+                            fileListElement.appendChild(fragment); // This is line 751 based on typical formatting
 
                             // Store hasMore locally so we can use it in the imagesLoaded callback
                             const _hasMore = data.hasMore;
@@ -720,7 +777,12 @@ try {
                                 if (window.filesMasonryInstance) {
                                     window.filesMasonryInstance.appended(newItems);
                                     window.filesMasonryInstance.layout();
-                                    newItems.forEach(item => item.classList.remove('opacity-0')); // Make them visible
+                                    // Make them visible by setting opacity to 1 on the images
+                                    newItems.forEach(item => {
+                                        const img = item.querySelector('img');
+                                        if (img) img.style.opacity = '1';
+                                    });
+                                    debugLog('[core.js] Masonry layout complete for new files. Images visible.');
                                 }
 
                                 // --- CRITICAL CHANGE: Update hasMoreImages and loading indicator *after* images are visible ---
@@ -745,22 +807,42 @@ try {
                                 // This prevents scroll listener from firing too early if image loading is slow.
                                 window.filesPage++;
                                 window.filesIsLoading = false;
+                                debugLog('[core.js] Files state updated. Page:', window.filesPage, 'hasMore:', window.filesHasMoreImages);
                             });
 
                         } catch (error) {
                             console.error('[core.js] Error loading user files:', error);
-                            if (initialLoadingMessage) initialLoadingMessage.remove(); // Ensure message is removed
 
+                            const initialMsg = document.getElementById('initial-files-loading');
                             if (window.filesPage === 1) { // Error on first load (auth error or other)
-                                fileListElement.innerHTML = error.isAuthError
-                                    ? '<p class="text-center text-gray-400 p-4 col-span-full">Please log in to access your files.</p>'
-                                    : `<p class="text-center text-red-500 p-4 col-span-full">Error loading files: ${error.message || 'An unknown error occurred'}</p>`;
-                                if (loadingIndicator) loadingIndicator.style.display = 'none'; // Hide indicator, main content has error
-                            } else { // Error on subsequent load
+                                if (error.isAuthError) {
+                                    if (initialMsg) {
+                                        initialMsg.textContent = 'Please log in to access your files.';
+                                        initialMsg.classList.add('text-center', 'text-gray-400', 'p-4', 'col-span-full');
+                                        initialMsg.style.display = 'block'; // Ensure it's visible
+                                    } else { // Fallback if element is missing
+                                        if (fileListElement) fileListElement.innerHTML = '<p class="text-center text-gray-400 p-4 col-span-full">Please log in to access your files.</p>'; // Added null check
+                                    }
+                                    window.showToast('Please log in to view your files.', 'info'); // More direct toast
+                                } else { // General error on first load
+                                    if (initialMsg) {
+                                        initialMsg.textContent = `Error loading files: ${error.message || 'An unknown error occurred'}`;
+                                        initialMsg.classList.remove('text-gray-400'); // Change text color for error
+                                        initialMsg.classList.add('text-red-500');
+                                        initialMsg.style.display = 'block';
+                                    } else {
+                                        if (fileListElement) fileListElement.innerHTML = `<p class="text-center text-red-500 p-4 col-span-full">Error loading files: ${error.message || 'An unknown error occurred'}</p>`; // Added null check
+                                    }
+                                    window.showToast(`Error loading files: ${error.message}`, 'error');
+                                }
+                                // Hide the main loading indicator if there was an error on first load
+                                if (loadingIndicator) loadingIndicator.style.display = 'none';
+                            } else { // Error on subsequent infinite scroll load
                                 if (loadingIndicator) {
                                     loadingIndicator.textContent = `Error loading more files: ${error.message || 'An unknown error occurred'}`;
                                     loadingIndicator.style.display = 'block'; // Keep visible to show the error message
                                 }
+                                window.showToast(`Error loading more files: ${error.message}`, 'error');
                             }
                             window.filesHasMoreImages = false; // Stop further attempts on error
                             window.filesIsLoading = false; // Ensure loading state is reset
@@ -768,24 +850,37 @@ try {
                             // This finally block is now mostly redundant for setting loading state and indicator display,
                             // as those are managed within the try/catch blocks and the imagesLoaded callback.
                             // It primarily ensures initialLoadingMessage is removed if somehow not already.
+                            // No action needed here beyond what's in catch/try blocks.
                         }
                     };
 
                     // Initial load of files
                     loadUserFiles();
 
-                    // Add scroll listener for infinite scroll
-                    const filesScrollHandler = () => {
-                        if (!contentArea || !window.filesMasonryInstance) return;
+                    // Add scroll listener for infinite scroll to the WINDOW
+                    // This will be removed by the cleanup logic above when another section is clicked.
+                    if (!window.currentFilesScrollHandler) { // Only attach if not already attached
+                        const filesScrollHandler = () => {
+                            // Check document.documentElement for scroll properties, not contentArea
+                            if (!window.filesMasonryInstance) return; 
 
-                        if (contentArea.scrollTop + contentArea.clientHeight >= contentArea.scrollHeight - 300) {
-                            if (!window.filesIsLoading && window.filesHasMoreImages) {
-                                loadUserFiles();
+                            // Debugging: Log scroll position and dimensions of the document
+                            debugLog(`[core.js] Document Scroll: scrollTop=${document.documentElement.scrollTop}, clientHeight=${window.innerHeight}, scrollHeight=${document.documentElement.scrollHeight}`);
+
+                            // Trigger when 600px from the bottom of the *document*
+                            if (document.documentElement.scrollTop + window.innerHeight >= document.documentElement.scrollHeight - 600) {
+                                if (!window.filesIsLoading && window.filesHasMoreImages) {
+                                    debugLog('[core.js] Near bottom of files (document), loading more...');
+                                    loadUserFiles();
+                                } else {
+                                    debugLog('[core.js] Not loading: filesIsLoading=', window.filesIsLoading, 'filesHasMoreImages=', window.filesHasMoreImages);
+                                }
                             }
-                        }
-                    };
-                    contentArea.addEventListener('scroll', filesScrollHandler);
-                    window.currentFilesScrollHandler = filesScrollHandler;
+                        };
+                        window.addEventListener('scroll', filesScrollHandler);
+                        window.currentFilesScrollHandler = filesScrollHandler;
+                        debugLog('[core.js] Files scroll handler attached to window.');
+                    }
                     
                 } else if (section === 'chat-history') {
                     contentArea.innerHTML = '<p class="text-center text-gray-400 p-4">Loading chat history...</p>';
@@ -942,7 +1037,10 @@ try {
                         .then(html => {
                             contentArea.innerHTML = html;
                             if (typeof window.initializeGallery === 'function') {
-                                window.initializeGallery();
+                                // IMPORTANT: gallery.js also needs its scroll listener attached to window
+                                // and removed by this global cleanup if it also has infinite scroll.
+                                // It should also store its listener in window.currentGalleryScrollHandler
+                                window.initializeGallery(); 
                             } else {
                                 contentArea.innerHTML = '<p class="text-center text-red-500 p-4">Error loading gallery: Gallery script not found.</p>';
                             }
@@ -964,8 +1062,6 @@ try {
 } catch (error) {
     console.error('[core.js] Sidebar initialization error:', error);
 }
-    
-    
     
     
     

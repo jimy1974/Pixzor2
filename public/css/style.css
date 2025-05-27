@@ -288,18 +288,6 @@ textarea#image-input {
     font-style: italic;
 }
 
-/* Image Loading Placeholder */
-.image-loading {
-    background: #4b5563;
-    width: 150px;
-    height: 150px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #d1d5db;
-    font-style: italic;
-}
 
 /* Image Modal */
 .image-modal img {
@@ -438,9 +426,6 @@ textarea#image-input {
     }
 }
 
-
-
-
 /* Styles for the new like button appearance */
 .like-container {
     /* Ensures it doesn't interfere with absolute positioning of children if any other styles were added. */
@@ -472,4 +457,131 @@ textarea#image-input {
     /* Add any additional specific styling for the count if needed below */
     margin-top: -2px; /* Adjust slightly to bring closer to heart, if needed */
     font-weight: 500;
+}
+
+  
+    .like-button {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(0, 0, 0, 0.5);
+        border: none;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .like-button:hover {
+        background: rgba(0, 0, 0, 0.7);
+    }
+    .like-button i {
+        color: white;
+        font-size: 1.2rem;
+    }
+    .like-button i.liked {
+        color: #ef4444;
+    }
+  
+
+
+/* Existing styles */
+
+/* Image List (Gallery & Files) */
+#image-list, #file-list { /* Ensure both use this structure */
+    overflow: hidden !important; /* Keep this if you have it */
+    width: 100%;
+    margin: 0 auto;
+    position: relative;
+    /* Optional: Add a subtle min-height to the container itself if desired for initial loading */
+    /* min-height: 200px; */
+}
+
+/* Image Card & File Card Sizing and Placeholder */
+/* Apply this to both image-card (gallery) and file-card (my files) for consistency */
+.grid-sizer,
+.image-card,
+.file-card {
+    width: calc(33.333% - 10px); /* Adjust based on your grid setup */
+    margin-bottom: 10px;
+    float: left; /* Necessary for Masonry */
+
+    /* NEW: Placeholder Styling */
+    background-color: #374151; /* A dark placeholder background */
+    border-radius: 0.5rem; /* Match img border-radius */
+    display: flex; /* Center content */
+    align-items: center;
+    justify-content: center;
+    color: #d1d5db; /* Text color for placeholder */
+    font-size: 0.875rem; /* text-sm */
+    font-style: italic;
+
+    /* CRITICAL: Fixed aspect ratio for loading items */
+    /* You might need to adjust 1 / 1 (square) to 4 / 3, 16 / 9, or a common ratio */
+    aspect-ratio: 1 / 1;
+    overflow: hidden; /* Ensure image doesn't overflow rounded corners */
+}
+
+/* Responsive adjustments for image-card and file-card */
+@media (max-width: 1024px) {
+    .grid-sizer,
+    .image-card,
+    .file-card {
+        width: calc(50% - 10px);
+    }
+}
+@media (max-width: 640px) {
+    .grid-sizer,
+    .image-card,
+    .file-card {
+        width: calc(100% - 10px);
+    }
+}
+
+
+/* Ensure the image inside fills its parent card */
+.image-card img,
+.file-card img {
+    display: block;
+    width: 100%;
+    height: 100%; /* Make image fill the aspect-ratio div */
+    object-fit: cover; /* Cover the area, cropping if necessary */
+    border-radius: 0.5rem;
+    transition: transform 0.2s ease-in-out;
+    opacity: 0; /* NEW: Start hidden, will fade in with JS */
+    transition: opacity 0.3s ease-in-out; /* NEW: Fade-in effect */
+}
+
+.image-card:hover img,
+.file-card:hover img {
+    transform: scale(1.02);
+}
+
+/* public/css/style.css */
+
+.grid-sizer {
+    /* Make it visually invisible */
+    background-color: transparent !important; /* Ensure no background color makes it visible */
+    border: none !important;                 /* Remove any borders */
+    margin: 0 !important;                    /* No external spacing */
+    padding: 0 !important;                   /* No internal spacing */
+    outline: none !important;                /* Remove any focus outline */
+    box-shadow: none !important;             /* Remove any box shadows */
+    opacity: 0 !important;                   /* Make it fully transparent */
+    pointer-events: none !important;         /* Prevent any interaction */
+
+    /* The critical part: make it take up no vertical space,
+       but allow Masonry to calculate its horizontal width based on parent grid */
+    height: 0 !important; 
+    font-size: 0 !important; /* In case any text/icon accidentally gets inside */
+    line-height: 0 !important; /* Prevents line height from adding height */
+
+    /* Ensure it doesn't stretch or influence grid layout negatively */
+    flex-shrink: 0 !important; /* Prevent it from shrinking */
+    flex-grow: 0 !important;   /* Prevent it from growing */
+    min-width: 0 !important;   /* Prevent it from taking minimum width */
+    min-height: 0 !important;  /* Prevent it from taking minimum height */
 }
