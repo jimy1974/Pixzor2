@@ -409,7 +409,8 @@ async function loadImages() {
     }
 }
 
-// --- Main Initialization Function for Gallery View ---
+
+
 window.initializeGallery = async function() {
     debugLog('[gallery.js] initializeGallery called.');
     const contentArea = document.getElementById('content-area');
@@ -417,38 +418,60 @@ window.initializeGallery = async function() {
         console.error('[gallery.js] initializeGallery: Content area not found');
         return;
     }
-    
+
+    // Crucially, reset all gallery state here
+    page = 1; // Reset page to 1
+    isLoading = false; // Reset loading flag
+    hasMoreImages = true; // Assume there are more images initially
+
+    if (masonryInstance) {
+        masonryInstance.destroy(); // Destroy previous Masonry instance
+        masonryInstance = null; // Clear reference
+    }
+    if (imageListObserver) {
+        imageListObserver.disconnect(); // Disconnect previous MutationObserver
+        imageListObserver = null; // Clear reference
+    }
+    // If you ever used galleryGridObserver, disconnect it here too.
+    // if (galleryGridObserver) {
+    //     galleryGridObserver.disconnect();
+    //     galleryGridObserver = null;
+    // }
+
+    // Clear content area and set up initial structure for gallery
     contentArea.innerHTML = `
         <div id="gallery-controls" class="mb-4"></div>
         <div id="image-list" class="gallery-grid" style="position: relative;">
             <div class="grid-sizer"></div>
         </div>
-        <div id="loading-indicator" class="text-center py-4" style="display: none;">Loading more images...</div>
+        <div id="loading-indicator" class="text-center py-4 text-gray-400" style="display: none;">Loading more images...</div>
     `;
-    
-    page = 1; 
-    isLoading = false;
-    hasMoreImages = true;
-    masonryInstance = null; // Reset masonry instance
 
     const imageList = document.getElementById('image-list');
     if (imageList && typeof Masonry !== 'undefined') {
         masonryInstance = new Masonry(imageList, {
             itemSelector: '.image-card',
             columnWidth: '.grid-sizer',
-            gutter: 12, 
+            gutter: 12,
             percentPosition: true,
-            initLayout: true 
+            initLayout: true // Perform initial layout when initialized
         });
         debugLog('[gallery.js] Masonry initialized.');
     } else {
         console.error('[gallery.js] Masonry could not be initialized. image-list or Masonry library missing.');
+        if(typeof window.showToast === 'function') window.showToast('Masonry library not loaded for gallery. Please refresh.', 'error');
+        return; // Exit if Masonry is critical and not available
     }
 
-    await loadImages(); 
+    // Load the first batch of images
+    await loadImages();
 
-    activateGalleryFeatures(); // Call this AFTER initial images are loaded and masonry is set up.
+    // This function now (re)attaches the scroll listener and re-initializes like buttons
+    // for the gallery, ensuring listeners are always fresh.
+    activateGalleryFeatures();
 };
+
+
 
 // --- Function to set up observers and dynamic features ---
 function activateGalleryFeatures() {
@@ -498,17 +521,19 @@ function galleryScrollHandler() {
 }
 
 // --- Like Button Initialization ---
+// ... (rest of your gallery.js code) ...
+
+// --- Like Button Initialization ---
 function initializeLikeButtons() {
     debugLog('[gallery.js] Initializing like buttons...');
     const likeButtons = document.querySelectorAll('.like-btn');
     debugLog(`[gallery.js] Found ${likeButtons.length} like buttons.`);
 
     likeButtons.forEach(button => {
-        // Check if listener already attached to prevent duplicates if cloning isn't perfect
-        if (button.dataset.listenerAttached === 'true') return;
+        if (button.dataset.listenerAttached === 'true') return; // Prevent duplicate listeners
 
         button.addEventListener('click', async (event) => {
-            event.stopPropagation(); 
+            event.stopPropagation();
             if (!window.isLoggedIn) {
                 if(typeof window.showToast === 'function') window.showToast('Please log in to like content.', 'info');
                 return;
@@ -516,47 +541,80 @@ function initializeLikeButtons() {
             const contentId = button.dataset.id;
             const icon = button.querySelector('i');
             const likeCountSpan = document.querySelector(`.like-count[data-id="${contentId}"]`);
-            
+
             if (!icon || !likeCountSpan) {
                 console.error('[gallery.js] Like icon or count span not found for button:', button);
                 return;
             }
 
             const isCurrentlyLiked = icon.classList.contains('text-red-500');
+
+            // Determine method and body based on current state
+            let method = 'POST';
+            let requestBody = {};
+            let expectedLikedState = !isCurrentlyLiked; // Optimistic target state
+
+            if (isCurrentlyLiked) { // If currently liked, user wants to UNLIKE
+                method = 'DELETE';
+                // DELETE requests typically do not have a body, or an empty one
+                // You can omit the body property entirely or set it to undefined
+                // if your server doesn't strictly require it.
+                requestBody = {}; // Empty body for DELETE
+            } else { // If not currently liked, user wants to LIKE
+                method = 'POST';
+                requestBody = { like: true }; // Explicitly send like: true for POST
+            }
+
             // Optimistic update
             button.disabled = true;
-            icon.classList.toggle('text-red-500', !isCurrentlyLiked);
-            icon.classList.toggle('text-gray-400', isCurrentlyLiked); 
-            likeCountSpan.textContent = parseInt(likeCountSpan.textContent) + (isCurrentlyLiked ? -1 : 1);
-            if (!isCurrentlyLiked) likeCountSpan.classList.add('text-red-500'); else likeCountSpan.classList.remove('text-red-500');
-            button.title = !isCurrentlyLiked ? 'Unlike' : 'Like';
+            icon.classList.toggle('text-red-500', expectedLikedState);
+            icon.classList.toggle('text-gray-400', !expectedLikedState);
+            likeCountSpan.textContent = parseInt(likeCountSpan.textContent) + (expectedLikedState ? 1 : -1);
+            likeCountSpan.classList.toggle('text-red-500', expectedLikedState);
+            likeCountSpan.classList.toggle('text-gray-200', !expectedLikedState); // Assume default is text-gray-200
+            button.title = expectedLikedState ? 'Unlike' : 'Like';
 
 
             try {
                 const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-                const response = await fetch(`/api/content/${contentId}/like`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-                    body: JSON.stringify({ like: !isCurrentlyLiked })
-                });
+                const fetchOptions = {
+                    method: method,
+                    headers: { 'X-CSRF-Token': csrfToken }
+                };
+
+                // Only add Content-Type header and body if it's a POST request and has a body
+                if (method === 'POST') {
+                    fetchOptions.headers['Content-Type'] = 'application/json';
+                    fetchOptions.body = JSON.stringify(requestBody);
+                }
+
+                const response = await fetch(`/api/content/${contentId}/like`, fetchOptions);
                 const data = await response.json();
-                if (!response.ok) throw new Error(data.error || 'Failed to update like status');
-                
-                // Update with server response
-                icon.classList.toggle('text-red-500', data.liked);
-                icon.classList.toggle('text-gray-400', !data.liked);
+
+                if (!response.ok) {
+                    // Check for specific server messages or 400s
+                    throw new Error(data.error || `Server error: ${response.status}`);
+                }
+
+                // Revert optimistic update if server response differs (e.g., if already liked/unliked)
+                // or simply apply server's final state
+                icon.classList.toggle('text-red-500', data.isLiked);
+                icon.classList.toggle('text-gray-400', !data.isLiked);
                 likeCountSpan.textContent = data.likeCount;
-                button.title = data.liked ? 'Unlike' : 'Like';
-                if (data.liked) likeCountSpan.classList.add('text-red-500'); else likeCountSpan.classList.remove('text-red-500');
+                button.title = data.isLiked ? 'Unlike' : 'Like';
+                likeCountSpan.classList.toggle('text-red-500', data.isLiked);
+                likeCountSpan.classList.toggle('text-gray-200', !data.isLiked);
+
 
             } catch (error) {
-                console.error('Error liking content:', error);
-                if(typeof window.showToast === 'function') window.showToast(error.message || 'Could not update like.', 'error');
-                // Revert optimistic update
-                icon.classList.toggle('text-red-500', isCurrentlyLiked);
+                console.error('Error liking/unliking content:', error);
+                if(typeof window.showToast === 'function') window.showToast(error.message || 'Could not update like status.', 'error');
+                // Revert optimistic update on error
+                icon.classList.toggle('text-red-500', isCurrentlyLiked); // Go back to original state
                 icon.classList.toggle('text-gray-400', !isCurrentlyLiked);
                 likeCountSpan.textContent = parseInt(likeCountSpan.textContent) + (isCurrentlyLiked ? 1 : -1); // Revert count
-                if (isCurrentlyLiked) likeCountSpan.classList.add('text-red-500'); else likeCountSpan.classList.remove('text-red-500');
+                likeCountSpan.classList.toggle('text-red-500', isCurrentlyLiked);
+                likeCountSpan.classList.toggle('text-gray-200', !isCurrentlyLiked);
                 button.title = isCurrentlyLiked ? 'Unlike' : 'Like';
             } finally {
                 button.disabled = false;
@@ -565,6 +623,7 @@ function initializeLikeButtons() {
         button.dataset.listenerAttached = 'true'; // Mark as attached
     });
 }
+
 window.initializeLikeButtons = initializeLikeButtons;
 
 // No top-level or DOMContentLoaded observer setup here.

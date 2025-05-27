@@ -1,16 +1,166 @@
+// Ensure you have these imports at the top:
 const express = require('express');
 const router = express.Router();
-const { User, GeneratedContent, ImageComment, ChatSession, ImageLike } = require('../db'); // Adjust path as necessary
-const { isAuthenticated } = require('../middleware/authMiddleware'); // Adjust path as necessary
-const { generalUpload, UPLOAD_DIR } = require('../config/multerConfig'); // Adjust path as necessary
+const { User, GeneratedContent, ImageComment, ChatSession, ImageLike } = require('../db');
+const { isAuthenticated } = require('../middleware/authMiddleware');
+// You also mentioned generalUpload and UPLOAD_DIR, make sure they are imported if used
+const { generalUpload, UPLOAD_DIR } = require('../config/multerConfig');
 const fs = require('fs').promises;
 const path = require('path');
 const sharp = require('sharp');
-const { Sequelize } = require('sequelize');
-const axios = require('axios'); // Add axios
-const { v4: uuidv4 } = require('uuid'); // Add uuid
-const { uploadImageBufferToGcs } = require('../utils/gcsUtils'); // --- Import GCS Util ---
-const { Op } = require('sequelize'); // Import Op for Sequelize conditions
+const { Sequelize } = require('sequelize'); // IMPORTANT: Make sure Sequelize is imported
+const axios = require('axios');
+const { v4: uuidv4 } = require('uuid');
+const { uploadImageBufferToGcs } = require('../utils/gcsUtils');
+const { Op } = require('sequelize'); // IMPORTANT: Make sure Op is imported
+
+
+// GET User Files (Protected, Paginated)
+// This is the route for 'My Files'
+//router.get('/files', isAuthenticated, async (req, res) => {
+router.get('/files', isAuthenticated, async (req, res) => {
+    
+    const userId = req.user.id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 6; // Default to 24 items per page for user files
+    const offset = (page - 1) * limit;
+
+    console.log(`[API Files] User ${userId} fetching page ${page}, limit ${limit}`);
+    
+     
+    try {
+        // IMPORTANT: Confirm 'contentUrl' is the actual column name in your 'GeneratedContent' model.
+        // If your column is named 'imageUrl' in the DB model, change 'contentUrl' to 'imageUrl' here.
+        const attributesToSelect = ['id', 'contentUrl', 'prompt', 'type', 'isPublic', 'createdAt', 'userId'];
+
+        // Add like counts and isLikedByUser using Sequelize.literal subqueries
+        attributesToSelect.push(
+            [Sequelize.literal('(SELECT COUNT(*) FROM `ImageLikes` WHERE `ImageLikes`.`contentId` = `GeneratedContent`.`id`)'), 'likeCount']
+        );
+        attributesToSelect.push([Sequelize.literal(`(EXISTS (SELECT 1 FROM \`ImageLikes\` WHERE \`ImageLikes\`.\`contentId\` = \`GeneratedContent\`.\`id\` AND \`ImageLikes\`.\`userId\` = ${parseInt(userId)}))`), 'isLikedByUser']);
+
+        const { count, rows } = await GeneratedContent.findAndCountAll({
+            where: {
+                userId: userId,
+                type: 'image' // Assuming only image content is shown in "files"
+            },
+            limit,
+            offset,
+            order: [['createdAt', 'DESC']], // Order by creation date, newest first
+            attributes: attributesToSelect, // Use the defined attributes
+        });
+
+        const totalItems = typeof count === 'number' ? count : (Array.isArray(count) && count.length > 0 ? count.length : 0);
+        const totalPages = Math.ceil(totalItems / limit);
+
+        console.log(`[API Files] User ${userId} found ${totalItems} total items, returning ${rows.length} for page ${page}. Total pages: ${totalPages}`);
+
+        res.json({
+            items: rows.map(item => ({
+                id: item.id,
+                // --- THIS IS THE CRUCIAL PART ---
+                // Map the actual DB column (e.g., item.contentUrl) to 'image' for compatibility
+                // with your original frontend code in core.js for `files` section.
+                image: item.contentUrl,         // Add 'image' property for original frontend compatibility
+                contentUrl: item.contentUrl,    // Keep 'contentUrl' for new frontend logic
+                thumbnailUrl: item.contentUrl,  // Assuming thumbnail is same as contentUrl if no separate column
+                // --- END CRUCIAL PART ---
+
+                prompt: item.prompt,
+                type: item.type,
+                createdAt: item.createdAt,
+                isPublic: item.isPublic,
+                isOwner: true, // Always true for /files route
+                likeCount: item.get('likeCount') ? parseInt(item.get('likeCount')) : 0,
+                isLikedByUser: !!item.get('isLikedByUser') // Convert to boolean
+            })),
+            currentPage: page,
+            totalPages,
+            totalItems,
+            hasMore: page < totalPages // Indicate if there are more pages
+        });
+
+    } catch (error) {
+        console.error(`[API Files] Error fetching files for user ${userId} on page ${page}:`, error);
+        res.status(500).json({ error: 'Internal server error while fetching user files.' });
+    }
+});
+
+// For your /api/gallery-content route, ensure it also maps correctly.
+// You should have already changed the 'limit' to 24 in the previous step.
+// If your GeneratedContent model uses 'contentUrl' as the image field,
+// ensure the `attributes` array and the `map` function correctly use it.
+router.get('/gallery-content', async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 24; // Increased default limit for gallery
+    const offset = (page - 1) * limit;
+    const userId = req.user ? req.user.id : null;
+
+    console.log(`[API Gallery] Fetching page ${page}, limit ${limit}, userId ${userId}`);
+
+    try {
+        let whereCondition = {
+            type: 'image',
+            isPublic: true // Only fetch public images for the main gallery
+        };
+
+        const include = [
+            { model: User, as: 'user', attributes: ['username'] }
+        ];
+
+        // IMPORTANT: Confirm 'contentUrl' is the actual column name in your 'GeneratedContent' model.
+        // If your column is named 'imageUrl' in the DB model, change 'contentUrl' to 'imageUrl' here.
+        const attributesToSelect = ['id', 'contentUrl', 'prompt', 'type', 'createdAt', 'isPublic', 'userId'];
+
+        attributesToSelect.push(
+            [Sequelize.literal('(SELECT COUNT(*) FROM `ImageLikes` WHERE `ImageLikes`.`contentId` = `GeneratedContent`.`id`)'), 'likeCount']
+        );
+
+        if (userId) {
+            attributesToSelect.push([Sequelize.literal(`(EXISTS (SELECT 1 FROM \`ImageLikes\` WHERE \`ImageLikes\`.\`contentId\` = \`GeneratedContent\`.\`id\` AND \`ImageLikes\`.\`userId\` = ${parseInt(userId)}))`), 'isLikedByUser']);
+        } else {
+            attributesToSelect.push([Sequelize.literal('0'), 'isLikedByUser']);
+        }
+
+        const { count, rows } = await GeneratedContent.findAndCountAll({
+            where: whereCondition,
+            limit,
+            offset,
+            order: [['createdAt', 'DESC']],
+            include,
+            attributes: attributesToSelect,
+            group: ['GeneratedContent.id']
+        });
+
+        const totalItems = count.length; 
+        const totalPages = Math.ceil(totalItems / limit);
+
+        console.log(`[API Gallery] Found ${totalItems} total items, returning ${rows.length} for page ${page}. Total pages: ${totalPages}`);
+
+        res.json({
+            items: rows.map(item => ({
+                id: item.id,
+                contentUrl: item.contentUrl,
+                thumbnailUrl: item.contentUrl, // Assuming thumbnail is same as contentUrl for now
+                prompt: item.prompt,
+                type: item.type,
+                createdAt: item.createdAt,
+                user: item.user ? { username: item.user.username } : null,
+                isPublic: item.isPublic,
+                isOwner: req.user && item.userId === req.user.id,
+                likeCount: item.get('likeCount') ? parseInt(item.get('likeCount')) : 0,
+                isLikedByUser: !!item.get('isLikedByUser')
+            })),
+            currentPage: page,
+            totalPages,
+            totalItems: totalItems,
+            hasMore: page < totalPages
+        });
+    } catch (error) {
+        console.error(`[API Gallery] Error fetching gallery content for page ${page}:`, error);
+        res.status(500).json({ error: 'Internal server error while fetching gallery content.' });
+    }
+});
 
 // GET User Credits (Protected) - Renamed from /tokens
 router.get('/credits', isAuthenticated, async (req, res) => {
@@ -477,87 +627,6 @@ router.post('/text-to-image', isAuthenticated, async (req, res) => {
     }
 });
 
-// GET Gallery Content (Publicly Accessible, Paginated)
-router.get('/gallery-content', async (req, res) => {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 12;
-    const offset = (page - 1) * limit;
-    const userId = req.user ? req.user.id : null;
-
-    console.log(`[API Gallery] Fetching page ${page}, limit ${limit}, userId ${userId}`);
-
-    try {
-        let whereCondition = {
-            type: 'image',
-            isPublic: true // Only fetch public images for the main gallery
-        };
-
-        // The conditional logic for showing a user's own images (including private ones)
-        // has been removed from this route. The public gallery should strictly show public images.
-        // A separate route or view (e.g., /my-content) should be used for users to see their own content.
-
-        const include = [
-            { model: User, as: 'user', attributes: ['username'] }
-        ];
-
-        // ImageLike model is no longer included here for likeCount or isLikedByUser,
-        // as these are now handled by Sequelize.literal subqueries.
-
-        const attributes = ['id', 'contentUrl', 'thumbnailUrl', 'prompt', 'type', 'createdAt', 'isPublic', 'userId'];
-
-        // Add like counts and isLikedByUser if ImageLike is included
-        // Add like counts and isLikedByUser using Sequelize.literal subqueries
-        attributes.push(
-            [Sequelize.literal('(SELECT COUNT(*) FROM `ImageLikes` WHERE `ImageLikes`.`contentId` = `GeneratedContent`.`id`)'), 'likeCount']
-        );
-
-        // userId is defined at line 484. Safely use it in the subquery.
-        // The subquery checks if a record exists in "ImageLikes" for the current content and user.
-        if (userId) {
-            attributes.push([Sequelize.literal(`(EXISTS (SELECT 1 FROM \`ImageLikes\` WHERE \`ImageLikes\`.\`contentId\` = \`GeneratedContent\`.\`id\` AND \`ImageLikes\`.\`userId\` = ${parseInt(userId)}))`), 'isLikedByUser']);
-        } else {
-            // For guests or if userId is not available, isLikedByUser is false (represented as 0).
-            attributes.push([Sequelize.literal('0'), 'isLikedByUser']);
-        }
-
-        const { count, rows } = await GeneratedContent.findAndCountAll({
-            where: whereCondition,
-            limit,
-            offset,
-            order: [['createdAt', 'DESC']],
-            include,
-            attributes,
-            group: ['GeneratedContent.id'] // Group by the main entity's ID. User inclusion is handled by Sequelize.
-        });
-
-        const totalPages = Math.ceil(count.length ? count.length : count / limit);
-
-        console.log(`[API Gallery] Found ${count.length || count} total items, returning ${rows.length} for page ${page}. Total pages: ${totalPages}`);
-
-        res.json({
-            items: rows.map(item => ({
-                id: item.id,
-                contentUrl: item.contentUrl,
-                thumbnailUrl: item.thumbnailUrl || item.contentUrl,
-                prompt: item.prompt,
-                type: item.type,
-                createdAt: item.createdAt,
-                user: item.user ? { username: item.user.username } : null,
-                isPublic: item.isPublic,
-                isOwner: req.user && item.userId === req.user.id,
-                likeCount: item.get('likeCount') ? parseInt(item.get('likeCount')) : 0,
-                isLikedByUser: !!item.get('isLikedByUser')
-            })),
-            currentPage: page,
-            totalPages,
-            totalItems: count.length || count,
-            hasMore: page < totalPages
-        });
-    } catch (error) {
-        console.error(`[API Gallery] Error fetching gallery content for page ${page}:`, error);
-        res.status(500).json({ error: 'Internal server error while fetching gallery content.' });
-    }
-});
 
 // GET Content Details (Public)
 router.get('/content-details/:id', async (req, res) => {

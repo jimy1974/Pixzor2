@@ -122,6 +122,8 @@ router.get('/', (req, res) => {
     });
 });
 
+
+/*
 router.get('/api/files', async (req, res) => {
     try {
         const userId = req.user ? req.user.id : null;
@@ -153,7 +155,7 @@ router.get('/api/files', async (req, res) => {
         console.error('[API Files] Error fetching files:', error.stack);
         res.status(500).json({ error: 'Internal server error' });
     }
-});
+});*/
 
 
 // Update content visibility
