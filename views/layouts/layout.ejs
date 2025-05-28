@@ -380,38 +380,46 @@
     #chat-submit:hover { 
         background: #16a34a; 
     }
-
+    
     /* Modals */
-    .modal { 
-        position: fixed; 
-        top: 0; 
-        left: 0; 
-        width: 100%; 
-        height: 100%; 
-        z-index: 120;
-        display: none; 
-        justify-content: center; 
-        align-items: center; 
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 120; /* Default z-index for most modals like comments, buy-tokens, welcome */
+        display: none !important;
+        justify-content: center;
+        align-items: center;
     }
-    .modal:not(.hidden) { 
-        display: flex; 
+    .modal:not(.hidden) {
+        display: flex !important;
     }
-    .modal-backdrop { 
-        position: absolute; 
-        top: 0; 
-        left: 0; 
-        width: 100%; 
-        height: 100%; 
-        background: rgba(0, 0, 0, 0.5); 
+    .modal.hidden {
+        display: none !important;
+        visibility: hidden;
     }
-    .modal-content { 
-        position: relative; 
-        z-index: 121; 
-        background: #fff; 
-        padding: 20px; 
-        border-radius: 8px; 
-        box-shadow: 0 0 15px rgba(0, 0, 0, 0.5); 
+    .modal-backdrop {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
     }
+    /* General Modal Content Box */
+    .modal-content {
+        position: relative;
+        z-index: 121; /* Always above its own backdrop */
+        background: #1f2937; /* Dark background for all modal content boxes */
+        color: #d1d5db; /* Default text color for modal content */
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+        transition: none; /* No animations on show/hide */
+    }
+   
     #welcome-modal .modal-content {
         background-color: #1f2937 !important;
         color: #ffffff !important;
@@ -647,115 +655,7 @@
     <!-- views/layouts/layout.ejs -->
     <!-- Toast and Modals -->
     <div id="modals-container">
-        <!-- Image Modal -->
-        <div id="image-modal" class="modal hidden"> <!-- Added 'hidden' class -->
-            <div class="modal-backdrop"></div>
-            <div class="modal-content">
-                <img id="enlarged-image" src="" alt="Enlarged Image">
-                <button id="close-image-modal" class="absolute top-2 right-2 text-white bg-gray-600 hover:bg-gray-500 px-2 py-1 rounded">✕</button>
-            </div>
-        </div>
-        <!-- Comments Modal -->
-        <div id="comments-modal" class="fixed inset-0 bg-black bg-opacity-75 hidden z-40">
-            <div class="bg-white rounded-lg shadow-lg flex flex-col md:flex-row relative w-11/12 md:w-4/5 max-h-screen overflow-y-auto">
-                <!-- Close Button -->
-                <button id="close-comments-modal" class="absolute top-2 right-2 bg-gray-400 text-white hover:bg-green-300 rounded-full p-1 text-2xl z-30" aria-label="Close Comments Modal">
-                    ×
-                </button>
-
-                <!-- Left Section: Image -->
-                <div class="md:w-2/3 bg-gray-100 flex flex-col items-start p-4 relative">
-                    <button id="fullscreen-icon" class="absolute top-2 left-2 bg-black text-white p-1 rounded-full text-sm z-20" aria-label="Fullscreen Image">
-                        <i class="fas fa-expand"></i>
-                    </button>
-                    <img id="modal-image" src="" alt="Full Image" class="w-full h-auto rounded-lg object-contain">
-                    <div class="w-full mt-4 space-y-2">
-                        <div id="model-container" class="flex flex-col hidden">
-                            <h3 class="text-sm font-semibold text-gray-700">Model</h3>
-                            <p id="modal-model" class="text-xs text-gray-500"></p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Right Section: Details and Comments -->
-                <div class="md:w-1/3 p-6 flex flex-col space-y-4">
-                    <!-- Prompt -->
-                    <div class="flex flex-col">
-                        <h3 class="text-lg font-bold text-black mb-2 flex items-center">
-                            Prompt
-                            <button id="copy-prompt" class="ml-2 text-gray-500 hover:text-gray-700" title="Copy Prompt" aria-label="Copy Prompt">
-                                <i class="fas fa-copy"></i>
-                            </button>
-                        </h3>
-                        <div id="modal-prompt-container" class="border p-3 rounded max-h-24 overflow-y-auto bg-gray-50 relative">
-                            <p id="modal-prompt" class="text-gray-600 pr-8"></p>
-                        </div>
-                    </div>
-
-                    <!-- User Profile -->
-                    <div>
-                        <h3 class="text-lg font-bold text-black">Created By <span id="modal-username" class="text-blue-500"></span></h3>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div class="flex flex-wrap gap-2">
-                        <div class="relative group">
-                            <a id="download-button" href="#" class="bg-green-600 text-white p-2 rounded flex items-center" download>
-                                <i class="fas fa-download"></i>
-                            </a>
-                            <span class="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">Download</span>
-                        </div>
-                        <div id="delete-button-container" class="relative group hidden">
-                            <button id="delete-button-modal" class="bg-red-600 text-white p-2 rounded flex items-center" aria-label="Delete Content">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                            <span class="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">Delete</span>
-                        </div>
-                        <div class="relative group">
-                            <a id="share-facebook" href="#" target="_blank" class="bg-blue-600 text-white p-2 rounded flex items-center" aria-label="Share on Facebook">
-                                <i class="fab fa-facebook-f"></i>
-                            </a>
-                            <span class="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">Facebook</span>
-                        </div>
-                        <div class="relative group">
-                            <a id="share-twitter" href="#" target="_blank" class="bg-blue-400 text-white p-2 rounded flex items-center" aria-label="Share on Twitter">
-                                <i class="fab fa-twitter"></i>
-                            </a>
-                            <span class="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">Twitter</span>
-                        </div>
-                        <div class="relative group">
-                            <a id="share-pinterest" href="#" target="_blank" class="bg-red-600 text-white p-2 rounded flex items-center" aria-label="Share on Pinterest">
-                                <i class="fab fa-pinterest-p"></i>
-                            </a>
-                            <span class="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">Pinterest</span>
-                        </div>
-                    </div>
-
-                    <!-- Comments Section -->
-                    <div class="flex flex-col flex-grow overflow-hidden">
-                        <h3 class="text-lg font-bold text-black mb-2">Comments</h3>
-                        <div class="flex-grow overflow-y-auto mb-4">
-                            <ul id="comments-list" class="space-y-2"></ul>
-                        </div>
-                        <div class="mt-auto">
-                            <textarea id="comment-input" placeholder="Login to comment" class="w-full p-2 border rounded text-black mb-2" aria-label="Write a comment" disabled></textarea>
-                            <button id="post-comment" class="w-full bg-green-600 text-white px-4 py-2 rounded" aria-label="Post Comment" disabled>Post Comment</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Fullscreen Modal -->
-        <div id="fullscreen-modal" class="hidden fixed inset-0 bg-black bg-opacity-90 flex justify-center items-center z-50">
-            <div class="relative w-full h-full flex justify-center items-center">
-                <img id="fullscreen-image" src="" alt="Full Image" class="max-w-full max-h-full object-contain">
-                <button id="close-fullscreen-modal" class="absolute top-4 right-4 bg-red-500 hover:bg-red-600 text-white text-2xl px-3 py-1 rounded-full shadow-lg">
-                    ×
-                </button>
-            </div>
-        </div>
-
+        
         <!-- Include other modals from partial -->
         <%- include('../partials/modals') %>
 

@@ -330,13 +330,7 @@ function createImageCard(image) {
              class="w-full rounded-lg cursor-pointer block object-cover transition-transform duration-200 ease-in-out group-hover:scale-105"
              loading="lazy" />
         <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity duration-200 ease-in-out rounded-lg"></div>
-        ${window.isLoggedIn && image.isOwner ? `
-            <button class="toggle-public-btn absolute top-2 left-2 bg-gray-800 text-white p-1.5 rounded-full hover:bg-gray-700 text-xs"
-                    data-id="${image.id}" data-public="${image.isPublic ? '1' : '0'}"
-                    title="${image.isPublic ? 'Make Private' : 'Make Public'}">
-                <i class="fas ${image.isPublic ? 'fa-lock' : 'fa-globe'}"></i>
-            </button>
-        ` : ''}
+            
         <div class="like-container absolute top-2 right-2 flex flex-col items-center space-y-0">
             <button class="like-btn ${image.isLikedByUser ? 'text-red-500' : 'text-gray-400'} hover:text-red-500"
                     data-id="${image.id}" title="${image.isLikedByUser ? 'Unlike' : 'Like'}"

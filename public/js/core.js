@@ -280,7 +280,7 @@ try {
 
    // User Authentication
     try {
-        window.isLoggedIn = false;
+        
         fetch('/api/user-info', {
             credentials: 'same-origin' // Include session cookies
         })
@@ -565,10 +565,15 @@ try {
                             const fileCard = event.target.closest('.file-card');
                             const toggleBtn = event.target.closest('.toggle-public-btn');
 
+                                                        
+                            // Inside filesClickHandler, within the if (toggleBtn) block
                             if (toggleBtn) {
-                                event.preventDefault(); // Prevent opening modal if button is clicked
+                                event.preventDefault(); // Prevent opening modal if button is clicked                                
                                 const contentId = toggleBtn.dataset.id;
-                                const isPublic = toggleBtn.dataset.public === '1';
+                                const isPublic = toggleBtn.dataset.public === '1'; // This is the *current* state
+                                const newStateIsPublic = !isPublic; // <--- ADD THIS LINE HERE
+                                
+                                
                                 fetch(`/api/content/${contentId}`, {
                                     method: 'PATCH',
                                     headers: {
@@ -576,15 +581,31 @@ try {
                                         'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
                                     },
                                     credentials: 'include',
-                                    body: JSON.stringify({ isPublic: !isPublic })
+                                    body: JSON.stringify({ isPublic: !isPublic }) // Sending the *toggled* state to the server
                                 })
                                     .then(response => response.json())
                                     .then(result => {
                                         if (result.success) {
-                                            toggleBtn.dataset.public = isPublic ? '0' : '1';
-                                            toggleBtn.title = isPublic ? 'Make Private' : 'Make Public';
-                                            toggleBtn.querySelector('i').className = `fas ${isPublic ? 'fa-lock' : 'fa-globe'}`;
-                                            window.showToast(`Image is now ${isPublic ? 'private' : 'public'}.`, 'success');
+                                            // PROBLEM: newStateIsPublic was used here without being defined.
+                                            // The previous code had assumed it was magically available.
+                                            toggleBtn.dataset.public = newStateIsPublic ? '1' : '0'; 
+                                
+                                            // Update button text and title (tooltip)
+                                            toggleBtn.textContent = newStateIsPublic ? 'Public' : 'Private';
+                                            toggleBtn.title = newStateIsPublic ? 'Make Private' : 'Make Public';
+
+                                            // Update button classes for color
+                                            toggleBtn.classList.remove('bg-red-600', 'hover:bg-red-700', 'bg-green-600', 'hover:bg-green-700'); // Remove existing color classes
+                                            if (newStateIsPublic) {
+                                                toggleBtn.classList.add('bg-green-600', 'hover:bg-green-700'); // Add green for public
+                                            } else {
+                                                toggleBtn.classList.add('bg-red-600', 'hover:bg-red-700');     // Add red for private
+                                            }
+
+                                            window.showToast(`Image is now ${newStateIsPublic ? 'public' : 'private'}.`, 'success');
+
+
+
                                         } else {
                                             throw new Error(result.error || 'Failed to update visibility');
                                         }
@@ -749,11 +770,19 @@ try {
                                 fileCard.innerHTML = `
                                     <img src="${item.image}" alt="File thumbnail" class="w-full h-full object-cover rounded-lg transition-transform duration-200 ease-in-out group-hover:scale-105" loading="lazy">
                                     <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity duration-200 ease-in-out rounded-lg"></div>
-                                    ${window.isLoggedIn && item.isOwner ? `
-                                        <button class="toggle-public-btn absolute top-2 left-2 bg-gray-800 text-white p-2 rounded-full hover:bg-gray-700" data-id="${item.id}" data-public="${item.isPublic ? '1' : '0'}" title="${item.isPublic ? 'Make Private' : 'Make Public'}">
-                                            <i class="fas ${item.isPublic ? 'fa-lock' : 'fa-globe'}"></i>
+                                      
+                                      
+                                   ${window.isLoggedIn && item.isOwner ? `
+                                        <button class="toggle-public-btn absolute top-2 left-2 px-3 py-1 rounded-full text-sm font-semibold transition-colors duration-200
+                                            ${item.isPublic ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}"
+                                            data-id="${item.id}" data-public="${item.isPublic ? '1' : '0'}"
+                                            title="${item.isPublic ? 'Make Private' : 'Make Public'}">
+                                            ${item.isPublic ? 'Public' : 'Private'}
                                         </button>
                                     ` : ''}
+
+
+
                                     <div class="like-container absolute top-2 right-2 flex flex-col items-center space-y-0">
                                         <button class="like-btn ${item.isLikedByUser ? 'text-red-500' : 'text-gray-400'} hover:text-red-500"
                                                 data-id="${item.id}" title="${item.isLikedByUser ? 'Unlike' : 'Like'}"

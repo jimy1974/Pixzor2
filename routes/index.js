@@ -193,6 +193,7 @@ router.patch('/api/content/:id', csrfProtection, async (req, res) => {
 });
 
 // ... existing /image/:id route
+// In your routes/index.js (or wherever this route lives)
 
 router.get('/image/:id', async (req, res) => {
     try {
@@ -230,7 +231,13 @@ router.get('/image/:id', async (req, res) => {
             });
         }
 
+        // --- IMPORTANT ADDITIONS START HERE ---
+        const isLoggedIn = req.isAuthenticated(); // Get login status from Passport.js
+        const user = req.user || null;           // Get user object from Passport.js (or null if not logged in)
+        const csrfToken = req.csrfToken ? req.csrfToken() : ''; // Get CSRF token if csurf is used
+
         const renderData = {
+            layout: 'layouts/layout',
             title: item.prompt ? `${item.prompt.substring(0, 50)}... | Pixzor` : 'Image Details | Pixzor',
             description: item.prompt ? `View this AI-generated image: ${item.prompt.substring(0, 100)}...` : 'View this AI-generated image on Pixzor.',
             imageUrl: item.contentUrl,
@@ -244,15 +251,21 @@ router.get('/image/:id', async (req, res) => {
                 }))
             },
             contentId: item.id,
-            includeChat: false,
-            requestPath: req.path
-            // No need to pass runwareModels or promptBasedStyles, as they're in res.locals
+            includeChat: true,
+            requestPath: req.path,
+            isLoggedIn: isLoggedIn, // <--- ADD THIS LINE
+            user: user,             // <--- ADD THIS LINE
+            csrfToken: csrfToken    // <--- ADD THIS LINE (crucial for form submission)
         };
+        // --- IMPORTANT ADDITIONS END HERE ---
 
         console.log(`[Image Route] Rendering image-detail for ID: ${contentId}, Data:`, {
             title: renderData.title,
             imageUrl: renderData.imageUrl,
-            contentId: renderData.contentId
+            contentId: renderData.contentId,
+            includeChat: renderData.includeChat,
+            isLoggedIn: renderData.isLoggedIn, // For debug logging
+            user: renderData.user ? renderData.user.username : 'Guest' // For debug logging
         });
         res.render('image-detail', renderData);
     } catch (error) {
@@ -265,7 +278,6 @@ router.get('/image/:id', async (req, res) => {
         });
     }
 });
-
 
 router.get('/partials/modals', (req, res) => {
     res.render('partials/modals', { layout: false, user: req.user }); // Pass user data

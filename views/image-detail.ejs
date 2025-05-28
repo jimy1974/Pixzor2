@@ -1,88 +1,9 @@
-<style>
-    .image-detail-container {
-        padding: 1rem;
-        box-sizing: border-box;
-        background: transparent;
-    }
-    .image-detail-image {
-        max-width: 100%;
-        height: auto;
-        border-radius: 8px;
-    }
-    .btn-primary {
-        background: #3B82F6;
-        color: white;
-        padding: 0.5rem 1rem;
-        border-radius: 8px;
-        text-align: center;
-        display: inline-block;
-    }
-    .btn-primary:hover {
-        background: #2563EB;
-    }
-    .comments-list {
-        max-height: 300px;
-        overflow-y: auto;
-    }
-    .comment-item {
-        border-bottom: 1px solid #4B5563;
-    }
-    .comment-item:last-child {
-        border-bottom: none;
-    }
-    .share-buttons {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-        margin-bottom: 1rem;
-    }
-    .share-button {
-        background: #374151;
-        color: white;
-        padding: 0.5rem;
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: background 0.2s;
-        width: 2.5rem;
-        height: 2.5rem;
-    }
-    .share-button:hover {
-        background: #4b5563;
-    }
-    .share-button i {
-        font-size: 1.25rem;
-    }
-    .share-button.twitter { background: #1DA1F2; }
-    .share-button.facebook { background: #3B5998; }
-    .share-button.pinterest { background: #E60023; }
-    .share-button.instagram { background: #C13584; }
-    .share-button.twitter:hover { background: #1A91DA; }
-    .share-button.facebook:hover { background: #344E86; }
-    .share-button.pinterest:hover { background: #CB2027; }
-    .share-button.instagram:hover { background: #B02E6F; }
-    .share-button.copy-link {
-        background: #6B7280;
-    }
-    .share-button.copy-link:hover {
-        background: #4B5563;
-    }
-    .back-button {
-        background: #374151;
-        color: white;
-        padding: 0.5rem 1rem;
-        border-radius: 8px;
-        margin-bottom: 1rem;
-        font-size: 0.875rem;
-    }
-    .back-button:hover {
-        background: #4B5563;
-    }
-</style>
+<!-- views/image-detail.ejs -->
+
+<!-- Removed the inline <style> block. All these styles are now in public/css/style.css -->
 
 <div class="image-detail-container">
-    <button id="back-button" class="back-button">Back</button>
+
     <img src="<%= item.contentUrl %>" alt="Image" class="image-detail-image mb-4">
     <a href="<%= item.contentUrl %>" download="pixzor_image_<%= item.id %>.jpg" class="btn btn-primary w-full mb-2">Download</a>
     <div class="share-buttons">
@@ -130,10 +51,118 @@
     <% if (isLoggedIn) { %>
     <form action="/api/content/<%= contentId %>/comments" method="POST" class="flex space-x-2">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <input type="text" name="commentText" placeholder="Write a comment..." class="flex-1 bg-gray-700 rounded px-4 py-2 text-gray-200" required>
+        <!-- Added ID here for JavaScript targeting -->
+        <input type="text" id="commentText" name="commentText" placeholder="Write a comment..." class="flex-1 bg-gray-700 rounded px-4 py-2 text-gray-200" required>
         <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded">Post</button>
     </form>
     <% } else { %>
     <p class="text-gray-400">Login to comment.</p>
     <% } %>
 </div>
+
+<!-- NEW SCRIPT BLOCK FOR HANDLING COMMENTS -->
+<!-- views/image-detail.ejs -->
+
+<!-- ... (existing HTML and script up to the form submission listener) ... -->
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const commentForm = document.querySelector('.image-detail-container form');
+        const commentInput = document.getElementById('commentText');
+        const commentsList = document.querySelector('.comments-list');
+        const isLoggedIn = window.isLoggedIn;
+        const currentUser = window.currentUser; // Get currentUser from global scope
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+
+        if (!commentForm || !commentInput || !commentsList || !csrfToken) {
+            console.error('Image detail comment form elements not found or CSRF token missing. Disabling comment input.');
+            if (commentInput) commentInput.disabled = true;
+            const postCommentBtn = document.querySelector('.image-detail-container button[type="submit"]');
+            if (postCommentBtn) postCommentBtn.disabled = true;
+            return;
+        }
+
+        if (!isLoggedIn) {
+            commentInput.disabled = true;
+            commentInput.placeholder = "Login to comment.";
+            const postCommentBtn = document.querySelector('.image-detail-container button[type="submit"]');
+            if (postCommentBtn) postCommentBtn.disabled = true;
+        } else {
+            commentInput.disabled = false;
+            commentInput.placeholder = "Write a comment...";
+            const postCommentBtn = document.querySelector('.image-detail-container button[type="submit"]');
+            if (postCommentBtn) postCommentBtn.disabled = false;
+        }
+
+        commentForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (!isLoggedIn) {
+                window.showToast('Please log in to post a comment.', 'error');
+                return;
+            }
+
+            const commentText = commentInput.value.trim();
+            if (!commentText) {
+                window.showToast('Comment cannot be empty.', 'warning');
+                return;
+            }
+
+            const postUrl = commentForm.action;
+
+            try {
+                const response = await fetch(postUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': csrfToken
+                    },
+                    body: JSON.stringify({ commentText: commentText })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `Server error: ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                // --- CRITICAL CHANGE HERE ---
+                // The server sends the comment object directly, not nested under 'comment'
+                const newComment = result; // <-- CHANGED THIS LINE
+                // --- END CRITICAL CHANGE ---
+
+                window.showToast('Comment posted successfully!', 'success');
+                commentInput.value = ''; // Clear input field
+
+                // Use the user information from the *server's response* (newComment.user)
+                // This is more robust as it guarantees the user data is exactly what was saved/retrieved.
+                const userPhoto = newComment.user?.photo || '/images/default-avatar.png'; // Use newComment.user
+                const userName = newComment.user?.username || 'Unknown User'; // Use newComment.user
+
+                const commentItem = document.createElement('li');
+                commentItem.classList.add('comment-item', 'pb-2', 'mb-2');
+                commentItem.innerHTML = `
+                    <div class="flex items-center mb-1">
+                        <img src="${userPhoto}" alt="${userName}" class="w-6 h-6 rounded-full mr-2">
+                        <span class="font-semibold text-sm mr-2">${userName}</span>
+                        <span class="text-gray-400 text-xs">${new Date(newComment.createdAt).toLocaleString()}</span>
+                    </div>
+                    <p class="text-gray-300 text-sm break-words">${newComment.commentText}</p>
+                `;
+
+                const noCommentsMessage = commentsList.querySelector('.text-gray-400.italic');
+                if (noCommentsMessage) {
+                    commentsList.innerHTML = '';
+                }
+
+                commentsList.prepend(commentItem);
+                commentsList.scrollTop = 0;
+
+            } catch (error) {
+                console.error('Error posting comment:', error);
+                window.showToast(`Failed to post comment: ${error.message}`, 'error');
+            }
+        });
+    });
+</script>

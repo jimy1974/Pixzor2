@@ -133,7 +133,7 @@ textarea#image-input {
 }
 .modal-content {
     position: relative;
-    z-index: 121;
+    z-index: 121; 
     background: #1f2937;
     color: #d1d5db;
     padding: 20px;
@@ -275,6 +275,7 @@ textarea#image-input {
 /* Fullscreen Modal */
 #fullscreen-modal {
     background-color: rgba(0, 0, 0, 0.9);
+    z-index: 9999; /* Set to a very high Z-INDEX to ensure it's always on top of all other modals */
 }
 #fullscreen-image {
     max-width: 90vw;
@@ -585,3 +586,97 @@ textarea#image-input {
     min-width: 0 !important;   /* Prevent it from taking minimum width */
     min-height: 0 !important;  /* Prevent it from taking minimum height */
 }
+
+
+#welcome-modal .modal-content,
+#about-popup .modal-content {
+    background: #1f2937 !important; /* Ensure consistency */
+    padding: 24px;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+}
+
+
+
+/* --- Styles from image-detail.ejs (NEWLY ADDED) --- */
+.image-detail-container {
+    padding: 1rem;
+    box-sizing: border-box;
+    background: transparent;
+}
+.image-detail-image {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+}
+.btn-primary {
+    background: #3B82F6;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    text-align: center;
+    display: inline-block;
+}
+.btn-primary:hover {
+    background: #2563EB;
+}
+.comments-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+.comment-item {
+    border-bottom: 1px solid #4B5563;
+}
+.comment-item:last-child {
+    border-bottom: none;
+}
+.share-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+.share-button {
+    background: #374151;
+    color: white;
+    padding: 0.5rem;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    width: 2.5rem;
+    height: 2.5rem;
+}
+.share-button:hover {
+    background: #4b5563;
+}
+.share-button i {
+    font-size: 1.25rem;
+}
+.share-button.twitter { background: #1DA1F2; }
+.share-button.facebook { background: #3B5998; }
+.share-button.pinterest { background: #E60023; }
+.share-button.instagram { background: #C13584; }
+.share-button.twitter:hover { background: #1A91DA; }
+.share-button.facebook:hover { background: #344E86; }
+.share-button.pinterest:hover { background: #CB2027; }
+.share-button.instagram:hover { background: #B02E6F; }
+.share-button.copy-link {
+    background: #6B7280;
+}
+.share-button.copy-link:hover {
+    background: #4B5563;
+}
+.back-button {
+    background: #374151;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+}
+.back-button:hover {
+    background: #4B5563;
+}
+/* --- End of Styles from image-detail.ejs --- */

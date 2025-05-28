@@ -286,20 +286,31 @@ router.get('/content/:contentId/comments', async (req, res) => {
 });
 
 // POST Comment to Content (Protected)
+// routes/api.js
+
+// ... (previous routes) ...
+
+// POST Comment to Content (Protected)
 router.post('/content/:contentId/comments', isAuthenticated, async (req, res) => {
     if (!req.user || !req.user.id) {
         return res.status(401).json({ error: 'User not authenticated.' });
     }
-    const { text } = req.body;
+    // --- CHANGE THIS LINE ---
+    // Instead of { text }, destructure { commentText } to match the client payload.
+    const { commentText } = req.body; // <-- MODIFIED HERE
+    // --- END CHANGE ---
+
     const userId = req.user.id;
     const contentId = req.params.contentId;
 
-    console.log(`[API Comments POST] User ${userId} posting comment to content ${contentId}: "${text}"`);
+    // --- Adjust console.log and validation to use 'commentText' ---
+    console.log(`[API Comments POST] User ${userId} posting comment to content ${contentId}: "${commentText}"`);
 
-    if (!text || text.trim() === '') {
+    if (!commentText || commentText.trim() === '') { // <-- MODIFIED HERE
         console.log(`[API Comments POST] Validation failed: Comment text is empty.`);
         return res.status(400).json({ error: 'Comment text cannot be empty.' });
     }
+    // --- End Adjustments ---
 
     try {
         // Optional: Validate content exists before creating comment
@@ -310,23 +321,23 @@ router.post('/content/:contentId/comments', isAuthenticated, async (req, res) =>
         }
 
         const newComment = await ImageComment.create({
-            commentText: text.trim(), // Use the correct model field name: commentText
+            commentText: commentText.trim(), // This line was already correct!
             userId: userId,
-            contentId: contentId // Use the correct model field name: contentId
+            contentId: contentId
         });
 
-        // Fetch the comment again to include the username
+        // Fetch the comment again to include the username and photo for the client-side update
         const commentWithUser = await ImageComment.findByPk(newComment.id, {
-            include: [{ model: User, as: 'user', attributes: ['username'] }]
+            include: [{ model: User, as: 'user', attributes: ['username', 'photo'] }] // <-- ADDED 'photo' here for consistency
         });
 
         console.log(`[API Comments POST] Comment saved successfully with ID: ${newComment.id}`);
-        // Respond with the created comment including user info
+        // Respond with the created comment including user info (username and photo)
         res.status(201).json({
             id: commentWithUser.id,
-            commentText: commentWithUser.commentText, // Correct field name
+            commentText: commentWithUser.commentText,
             createdAt: commentWithUser.createdAt,
-            user: commentWithUser.user ? { username: commentWithUser.user.username } : null
+            user: commentWithUser.user ? { username: commentWithUser.user.username, photo: commentWithUser.user.photo } : null // <-- ADDED 'photo' here for response
         });
 
     } catch (error) {
@@ -334,6 +345,7 @@ router.post('/content/:contentId/comments', isAuthenticated, async (req, res) =>
         res.status(500).json({ error: 'Failed to save comment.' });
     }
 });
+
 
 // DELETE Content (Protected, User must own content)
 router.delete('/content/:contentId', isAuthenticated, async (req, res) => {
