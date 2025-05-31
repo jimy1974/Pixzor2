@@ -169,7 +169,8 @@ window.openCommentsModal = function(contentId, imageUrl, promptText = 'Loading..
         shareBtn: modal.querySelector('#share-button-modal'),
         closeCommentsBtn: modal.querySelector('#close-comments-modal'),
         copyPromptButton: modal.querySelector('#copy-prompt'),
-        fullscreenIconButton: modal.querySelector('#fullscreen-icon')
+        fullscreenIconButton: modal.querySelector('#fullscreen-icon'),
+        editImageModalButton: modal.querySelector('#edit-image-modal-button') // NEW: Reference to the modal's edit button
     };
 
     for (const key in elements) {
@@ -197,10 +198,12 @@ window.openCommentsModal = function(contentId, imageUrl, promptText = 'Loading..
         if(elements.commentInput) elements.commentInput.disabled = false;
         if(elements.postCommentButton) elements.postCommentButton.disabled = false;
         if(elements.commentInput) elements.commentInput.placeholder = "Write a comment...";
+        if(elements.editImageModalButton) elements.editImageModalButton.disabled = false; // Enable if logged in
     } else {
         if(elements.commentInput) elements.commentInput.disabled = true;
         if(elements.postCommentButton) elements.postCommentButton.disabled = true;
         if(elements.commentInput) elements.commentInput.placeholder = "Login to comment";
+        if(elements.editImageModalButton) elements.editImageModalButton.disabled = true; // Disable if not logged in
     }
 
     if(elements.closeCommentsBtn) {
@@ -280,6 +283,20 @@ window.openCommentsModal = function(contentId, imageUrl, promptText = 'Loading..
                 .catch(err => { console.error('Failed to copy share link:', err); if(typeof window.showToast === 'function') window.showToast('Could not copy link.', 'error'); });
         };
     }
+
+    // NEW: Edit Image button logic for the modal
+    if (elements.editImageModalButton && elements.modalImage) {
+        elements.editImageModalButton.onclick = (e) => {
+            e.stopPropagation();
+            if (!window.isLoggedIn) {
+                window.showToast('Please log in to edit images.', 'info');
+                return;
+            }
+            const imageUrlFromModal = elements.modalImage.src; // Get image from the modal's displayed image
+            window.handleEditImageAction(imageUrlFromModal); // Call global handler from core.js
+            window.hideModal('comments-modal'); // Close the modal after action
+        };
+    }
     
     history.pushState({ contentId, section: 'gallery', modal: true }, '', `/image/${contentId}`);
     document.title = (promptText ? promptText.substring(0,30) : 'Image') + '... | Pixzor';
@@ -308,7 +325,6 @@ window.openCommentsModal = function(contentId, imageUrl, promptText = 'Loading..
             if(elements.modalUsername) elements.modalUsername.textContent = 'Error';
         });
 };
-
 // --- Helper: Escape HTML --- 
 function escapeHTML(str) {
     if (str === null || typeof str === 'undefined') return ''; 
@@ -339,9 +355,39 @@ function createImageCard(image) {
             </button>
             <span class="like-count text-xs ${image.isLikedByUser ? 'text-red-500' : 'text-gray-200'}" data-id="${image.id}">${image.likeCount || 0}</span>
         </div>
+
+        <!-- NEW: Edit Image Button for Gallery Cards -->
+        <button class="edit-image-gallery-btn absolute bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-sm font-semibold transition-all duration-300 opacity-0 group-hover:opacity-60
+                       bg-green-600 hover:bg-green-700 text-white"
+                data-image-url="${image.contentUrl}" title="Edit Image"
+                ${window.isLoggedIn ? '' : 'disabled'}>
+            <i class="fas fa-edit mr-1"></i> Edit
+        </button>
     `;
+
+    // Add event listener directly to the edit button within the card
+    // This is safer than delegating as the button is dynamically added and may have multiple instances.
+    const editButton = imageCard.querySelector('.edit-image-gallery-btn');
+    if (editButton) {
+        editButton.addEventListener('click', (event) => {
+            event.stopPropagation(); // Prevent opening comments modal when clicking edit
+            if (!window.isLoggedIn) {
+                window.showToast('Please log in to edit images.', 'info');
+                return;
+            }
+            const imageUrl = event.currentTarget.dataset.imageUrl;
+            window.handleEditImageAction(imageUrl); // Call global handler from core.js
+        });
+    }
+
     imageCard.addEventListener('click', (event) => {
-        if (event.target.closest('button')) return;
+        // Ensure clicking the edit button doesn't trigger the modal open
+        if (event.target.closest('.edit-image-gallery-btn')) {
+            return;
+        }
+        if (event.target.closest('button')) { // Also prevent modal if any other button (like, toggle public) is clicked
+            return;
+        }
         openCommentsModal(image.id, image.contentUrl, image.prompt);
     });
     return imageCard;

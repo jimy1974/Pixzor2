@@ -21,6 +21,8 @@
                     <img id="image-thumbnail-preview" src="#" alt="Upload preview" class="w-full h-full object-cover rounded hidden">
                 </label>
                 <input type="file" id="image-upload-input" name="image" accept="image/png, image/jpeg" class="hidden">
+                <!-- NEW: Hidden input to store image URL from gallery/modal -->
+                <input type="hidden" id="image-for-edit-url" name="imageForEditUrl">
                 <button id="clear-image-upload" class="absolute top-0 right-0 -mt-1 -mr-1 bg-red-600 hover:bg-red-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs z-20 hidden" title="Clear Image">
                     <i class="fas fa-times"></i>
                 </button>
@@ -189,6 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const enhanceButton = document.getElementById('enhance-prompt-button');
     const strengthSlider = document.getElementById('image-strength-slider');
     const strengthValueDisplay = document.getElementById('image-strength-value-display');
+    const imageForEditUrlInput = document.getElementById('image-for-edit-url'); // NEW
 
     // Image Upload Listener
     if (imageUploadInput && thumbnail && clearButton && placeholderIcon) {
@@ -201,6 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     thumbnail.classList.remove('hidden');
                     placeholderIcon.classList.add('hidden');
                     clearButton.classList.remove('hidden');
+                    if (imageForEditUrlInput) imageForEditUrlInput.value = ''; // Clear URL if file is uploaded
                 };
                 reader.readAsDataURL(file);
             } else {
@@ -209,6 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 thumbnail.classList.add('hidden');
                 placeholderIcon.classList.remove('hidden');
                 clearButton.classList.add('hidden');
+                if (imageForEditUrlInput) imageForEditUrlInput.value = ''; // Clear URL
             }
         });
 
@@ -218,6 +223,11 @@ document.addEventListener('DOMContentLoaded', () => {
             thumbnail.classList.add('hidden');
             placeholderIcon.classList.remove('hidden');
             clearButton.classList.add('hidden');
+            // NEW: Clear the hidden image URL input as well
+            if (imageForEditUrlInput) {
+                imageForEditUrlInput.value = '';
+                // debugLog('[chat-tab.ejs] Cleared imageForEditUrlInput.'); // Removed debug from EJS partial to keep it clean.
+            }
         });
     }
 

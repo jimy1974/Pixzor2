@@ -1,4 +1,5 @@
-window.DEBUG_ENABLED = false;
+// public/js/core.js
+window.DEBUG_ENABLED = true;
 
 // Utility function for conditional logging
 window.debugLog = (...args) => {
@@ -278,6 +279,38 @@ try {
         }
     };
 
+    // NEW: Function to handle placing image into prompt box for editing
+    window.handleEditImageAction = function(imageUrl) {
+        debugLog('[core.js] handleEditImageAction called with URL:', imageUrl);
+
+        if (!imageUrl) {
+            window.showToast('No image URL provided for editing.', 'error');
+            return;
+        }
+
+        // Switch to the 'Create Images' tab and pass the image URL
+        // The loadChatTab function will now handle populating the thumbnail AFTER the partial is loaded.
+        if (typeof window.loadChatTab === 'function') {
+            // Pass imageUrlToLoad as the third argument
+            window.loadChatTab('create-image', 'create-images', imageUrl);
+            debugLog('[core.js] Calling loadChatTab with image URL for editing.');
+        } else {
+            console.error('[core.js] window.loadChatTab is not defined. Cannot switch chat tab and load image.');
+            window.showToast('Failed to switch to image generation tab. Please refresh.', 'error');
+            return;
+        }
+
+        window.showToast('Image loaded into prompt box for editing!', 'success');
+
+        // Scroll the chat box into view (it's fixed at the bottom)
+        const chatBox = document.getElementById('chat-box');
+        if (chatBox) {
+            chatBox.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            debugLog('[core.js] Scrolled chat box into view.');
+        }
+    };
+
+
    // User Authentication
     try {
         
@@ -347,8 +380,8 @@ try {
     }
 
     // Function to load chat tab partial (no change)
-    const loadChatTab = async (section, activeTab = 'create-images') => {
-      debugLog(`[core.js] loadChatTab called with section=${section}, activeTab=${activeTab}`);
+    const loadChatTab = async (section, activeTab = 'create-images', imageUrlToLoad = null) => { // ADDED imageUrlToLoad PARAMETER
+      debugLog(`[core.js] loadChatTab called with section=${section}, activeTab=${activeTab}, imageUrlToLoad=${imageUrlToLoad}`);
 
       const mainContentArea = document.getElementById('content-area');
       if (!mainContentArea) {
@@ -398,6 +431,28 @@ try {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           chatTabContent.innerHTML = await response.text();
           debugLog('[core.js] Refreshed #chat-tab-content');
+
+          // NEW: If an image URL was provided, populate the thumbnail after content is loaded
+          if (imageUrlToLoad) {
+              const imageThumbnailPreview = chatTabContent.querySelector('#image-thumbnail-preview');
+              const imageForEditUrlInput = chatTabContent.querySelector('#image-for-edit-url');
+              const clearImageUpload = chatTabContent.querySelector('#clear-image-upload');
+              const thumbnailPlaceholderIcon = chatTabContent.querySelector('#thumbnail-placeholder-icon');
+              const imageUploadInput = chatTabContent.querySelector('#image-upload-input'); // Ensure file input is cleared
+
+              if (imageThumbnailPreview && imageForEditUrlInput && clearImageUpload && thumbnailPlaceholderIcon && imageUploadInput) {
+                  imageThumbnailPreview.src = imageUrlToLoad;
+                  imageThumbnailPreview.classList.remove('hidden');
+                  thumbnailPlaceholderIcon.classList.add('hidden');
+                  clearImageUpload.classList.remove('hidden');
+                  imageForEditUrlInput.value = imageUrlToLoad; // Set the URL in the hidden input
+                  imageUploadInput.value = ''; // Clear the file input if any
+                  debugLog('[core.js] Image URL populated in thumbnail and hidden input after tab refresh.');
+              } else {
+                  console.warn('[core.js] Could not find thumbnail elements after tab refresh to populate image. Check chat-tab.ejs IDs.');
+              }
+          }
+
         } catch (error) {
           console.error('[core.js] Error fetching /chat-tab:', error);
           window.showToast('Failed to load chat panel. Please refresh.', 'error');
