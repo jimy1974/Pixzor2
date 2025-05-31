@@ -1,5 +1,5 @@
 // public/js/core.js
-window.DEBUG_ENABLED = true;
+window.DEBUG_ENABLED = false;
 
 // Utility function for conditional logging
 window.debugLog = (...args) => {
