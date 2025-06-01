@@ -18,6 +18,7 @@ const sharp = require('sharp');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const cookieParser = require('cookie-parser');
 const csrf = require('csurf');
+const { isAuthenticated, isAdmin, isAdminApi } = require('./middleware/authMiddleware'); 
 
 // Import configurations
 const { RUNWARE_MODELS } = require('./config/modelsConfig');
@@ -345,6 +346,15 @@ app.get('/api/library/chats', async (req, res) => {
         console.error('[API Chat History] Error fetching chat history:', err.stack);
         res.status(500).json({ items: [], message: 'Error loading chat history.' });
     }
+});
+
+
+app.get('/admin', isAdmin, (req, res) => { // <-- CHANGED HERE
+    console.log('[Server] Rendering admin.ejs for admin panel (access granted).');
+    res.render('admin', {
+        title: 'Admin Panel - Pixzor',
+        description: 'Admin panel for Pixzor AI generative image site'
+    });
 });
 
 

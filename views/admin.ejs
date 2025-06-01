@@ -1,0 +1,81 @@
+<!-- views/admin.ejs -->
+<div class="container mx-auto p-4">
+    <h1 class="text-3xl font-bold mb-6 text-gray-800 dark:text-gray-100">Admin Panel - User Statistics</h1>
+
+    <div class="bg-white dark:bg-gray-700 shadow-md rounded-lg p-6">
+        <h2 class="text-xl font-semibold mb-4 text-gray-700 dark:text-gray-200">All Users</h2>
+        
+        <div id="loadingMessage" class="text-center py-4 text-gray-600 dark:text-gray-300">Loading user data...</div>
+        <div id="errorMessage" class="hidden text-center py-4 text-red-500">Failed to load user data. Please try again.</div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600">
+                <thead>
+                    <tr>
+                        <th class="py-2 px-4 border-b dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-left text-sm font-semibold text-gray-600 dark:text-gray-300">ID</th>
+                        <th class="py-2 px-4 border-b dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-left text-sm font-semibold text-gray-600 dark:text-gray-300">Username</th>
+                        <th class="py-2 px-4 border-b dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-left text-sm font-semibold text-gray-600 dark:text-gray-300">Email</th>
+                        <th class="py-2 px-4 border-b dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-left text-sm font-semibold text-gray-600 dark:text-gray-300">Credits</th>
+                        <th class="py-2 px-4 border-b dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-left text-sm font-semibold text-gray-600 dark:text-gray-300">Images Created</th>
+                        <th class="py-2 px-4 border-b dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-left text-sm font-semibold text-gray-600 dark:text-gray-300">Joined Date</th>
+                    </tr>
+                </thead>
+                <tbody id="userStatsBody">
+                    <!-- Data will be loaded here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', async () => {
+        const loadingMessage = document.getElementById('loadingMessage');
+        const errorMessage = document.getElementById('errorMessage');
+        const userStatsBody = document.getElementById('userStatsBody');
+
+        try {
+            const response = await fetch('/api/admin/user-stats');
+            if (!response.ok) {
+                // Handle different error statuses
+                if (response.status === 401) {
+                    errorMessage.textContent = 'You must be logged in to view this page.';
+                } else if (response.status === 403) {
+                    errorMessage.textContent = 'You do not have permission to view this page.';
+                } else {
+                    errorMessage.textContent = `Error: ${response.status} ${response.statusText}`;
+                }
+                errorMessage.classList.remove('hidden');
+                loadingMessage.classList.add('hidden');
+                return;
+            }
+
+            const users = await response.json();
+            loadingMessage.classList.add('hidden'); // Hide loading message on success
+
+            if (users.length === 0) {
+                userStatsBody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-gray-500 dark:text-gray-400">No users found.</td></tr>`;
+                return;
+            }
+
+            users.forEach(user => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50 dark:hover:bg-gray-700'; // Add hover styles for table rows
+                row.innerHTML = `
+                    <td class="py-2 px-4 border-b dark:border-gray-600 text-gray-700 dark:text-gray-200">${user.id}</td>
+                    <td class="py-2 px-4 border-b dark:border-gray-600 text-gray-700 dark:text-gray-200">${user.username}</td>
+                    <td class="py-2 px-4 border-b dark:border-gray-600 text-gray-700 dark:text-gray-200">${user.email}</td>
+                    <td class="py-2 px-4 border-b dark:border-gray-600 text-gray-700 dark:text-gray-200">${parseFloat(user.credits).toFixed(2)}</td>
+                    <td class="py-2 px-4 border-b dark:border-gray-600 text-gray-700 dark:text-gray-200">${user.imageCount}</td>
+                    <td class="py-2 px-4 border-b dark:border-gray-600 text-gray-700 dark:text-gray-200">${new Date(user.createdAt).toLocaleDateString()}</td>
+                `;
+                userStatsBody.appendChild(row);
+            });
+        } catch (error) {
+            console.error('Error fetching user stats:', error);
+            errorMessage.textContent = 'An unexpected error occurred while loading data.';
+            errorMessage.classList.remove('hidden');
+            loadingMessage.classList.add('hidden');
+        }
+    });
+</script>

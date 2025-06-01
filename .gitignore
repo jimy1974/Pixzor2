@@ -1,6 +1,7 @@
 .env 
 .git/
 .roo/
+.feedback/
 
 # Node.js dependencies
 node_modules/

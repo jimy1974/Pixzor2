@@ -24,6 +24,81 @@ try {
     document.addEventListener('DOMContentLoaded', () => {
         debugLog('[core.js] DOMContentLoaded fired');
 
+        
+        
+        //////////////////////////////////        
+        // --- Feedback Modal Logic ---
+        
+        const feedbackModal = document.getElementById('feedbackModal');
+        const closeFeedbackModalBtn = document.getElementById('close-feedback-modal'); // The 'x' button in the modal
+        const cancelFeedbackModalBtn = document.getElementById('cancel-feedback-modal'); // The 'Cancel' button in the modal
+
+        // Function to hide the feedback modal
+        const hideFeedbackModal = () => {
+            if (feedbackModal) {
+                feedbackModal.classList.add('hidden'); // Add 'hidden' class to hide
+                feedbackModal.style.display = 'none'; // Ensure display is none for full hiding
+            }
+        };
+
+        // Event listeners for closing the feedback modal
+        if (closeFeedbackModalBtn) {
+            closeFeedbackModalBtn.addEventListener('click', hideFeedbackModal);
+        }
+        if (cancelFeedbackModalBtn) {
+            cancelFeedbackModalBtn.addEventListener('click', hideFeedbackModal);
+        }
+
+        // Close the modal if user clicks on the backdrop (outside the modal content)
+        window.addEventListener('click', (event) => {
+            if (event.target === feedbackModal) { // Check if the clicked element is the modal backdrop itself
+                hideFeedbackModal();
+            }
+        });
+
+        // Handle Feedback Form Submission
+        const feedbackForm = document.getElementById('feedbackForm');
+        if (feedbackForm) {
+            feedbackForm.addEventListener('submit', async (e) => {
+                e.preventDefault(); // Prevent default form submission
+
+                // Collect form data
+                const formData = new FormData(feedbackForm);
+                const payload = Object.fromEntries(formData); // Convert to a plain object
+
+                try {
+                    const response = await fetch(feedbackForm.action, {
+                        method: feedbackForm.method,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            // Include CSRF token if you have one set in a meta tag
+                            'CSRF-Token': document.querySelector('meta[name="csrf-token"]') ? document.querySelector('meta[name="csrf-token"]').content : ''
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        // Replace with your global showToast function if you have one
+                        window.showToast('Feedback submitted successfully! Thank you for your input.', 'success'); 
+                        hideFeedbackModal(); // Hide the modal on success
+                        feedbackForm.reset(); // Clear the form fields
+                    } else {
+                        const errorData = await response.json();
+                        window.showToast(`Error submitting feedback: ${errorData.message || response.statusText}`, 'error');
+                    }
+                } catch (error) {
+                    console.error('Network error or unexpected issue:', error);
+                    window.showToast('Could not connect to the server to submit feedback. Please check your internet connection.', 'error');
+                }
+            });
+        }
+        
+        
+        ////////////////////////////////
+        
+        
+        
         // Popstate handler
         try {
             window.addEventListener('popstate', (event) => {
@@ -1134,7 +1209,17 @@ try {
                         });
                 } else if (section === 'create-image') {
                     loadChatTab(section, 'create-images');
-                } else {
+                } else if (section === 'feedback') {
+                        
+                        // Show the feedback modal
+                        if (feedbackModal) {
+                            feedbackModal.classList.remove('hidden');
+                            feedbackModal.style.display = 'flex';
+                        } else {
+                            console.error('[core.js] Feedback modal element not found for display.');
+                            window.showToast('Feedback modal not available.', 'error');
+                        }
+                    } else {
                     contentArea.innerHTML = `<p class="text-center text-gray-400 p-4">Section ${section} not implemented.</p>`;
                 }
             } catch (error) {
@@ -1148,152 +1233,301 @@ try {
 }
     
     
-    
+
+    // public/js/core.js (only the 'Modals' block, as requested)
+
     // Modals
     try {
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', () => { 
             debugLog('[core.js] Modals DOMContentLoaded fired');
+            
             fetch('/partials/modals')
                 .then(response => response.text())
                 .then(html => {
                     const modalsContainer = document.getElementById('modals-container');
                     if (modalsContainer) {
                         modalsContainer.innerHTML = html;
+                        debugLog('[core.js] Modals HTML injected into modals-container.');
+
+                        // --- Global showModal/hideModal functions (updated) ---
+                        window.showModal = function(id) {
+                            const modal = document.getElementById(id);
+                            if (modal) {
+                                modal.classList.remove('hidden');
+                                modal.style.display = 'flex'; // Ensure flex for centering (per your CSS)
+                                debugLog(`[core.js] Modal ${id} shown`);
+                            } else {
+                                console.error(`[core.js] Modal with ID ${id} not found`);
+                            }
+                        };
+                        window.hideModal = function(id) {
+                            const modal = document.getElementById(id);
+                            if (modal) {
+                                modal.classList.add('hidden');
+                                modal.style.display = 'none'; // Ensure display is none for full hiding
+                                debugLog(`[core.js] Modal ${id} hidden`);
+                            } else {
+                                console.error(`[core.js] Modal with ID ${id} not found`);
+                            }
+                        };
+                        
+                        // --- Feedback Modal Logic ---
+                        const feedbackModal = document.getElementById('feedbackModal');
+                        const closeFeedbackModalBtn = document.getElementById('close-feedback-modal');
+                        const cancelFeedbackModalBtn = document.getElementById('cancel-feedback-modal');
+                        const feedbackForm = document.getElementById('feedbackForm');
+
+                        // NEW: Elements for login required state
+                        const feedbackLoginRequiredDiv = document.getElementById('feedback-login-required');
+                        const feedbackLoginButton = document.getElementById('feedback-login-button');
+                        const feedbackDescriptionText = document.getElementById('feedback-description-text');
+                        // END NEW
+
+                        const hideFeedbackModal = () => {
+                            if (feedbackModal) {
+                                feedbackModal.classList.add('hidden');
+                                feedbackModal.style.display = 'none';
+                                debugLog('[core.js] Feedback modal hidden.');
+                            }
+                        };
+                        window.hideFeedbackModal = hideFeedbackModal; 
+
+                        if (closeFeedbackModalBtn) {
+                            closeFeedbackModalBtn.addEventListener('click', hideFeedbackModal);
+                            debugLog('[core.js] Feedback modal close button listener attached.');
+                        }
+                        if (cancelFeedbackModalBtn) {
+                            cancelFeedbackModalBtn.addEventListener('click', hideFeedbackModal);
+                            debugLog('[core.js] Feedback modal cancel button listener attached.');
+                        }
+
+                        if (feedbackModal) { 
+                            window.addEventListener('click', (event) => {
+                                if (event.target === feedbackModal) { 
+                                    hideFeedbackModal();
+                                }
+                            });
+                            debugLog('[core.js] Feedback modal backdrop listener attached.');
+                        }
+
+                        // =======================================================
+                        // NEW FUNCTION FOR FEEDBACK FORM VISIBILITY BASED ON LOGIN
+                        // =======================================================
+                        const toggleFeedbackFormVisibility = () => {
+                            if (window.isLoggedIn) {
+                                if (feedbackLoginRequiredDiv) feedbackLoginRequiredDiv.classList.add('hidden');
+                                if (feedbackForm) feedbackForm.classList.remove('hidden'); // Show form
+                                if (feedbackDescriptionText) feedbackDescriptionText.classList.remove('hidden'); // Show description
+                                debugLog('[core.js] User logged in: showing feedback form.');
+                            } else {
+                                if (feedbackLoginRequiredDiv) feedbackLoginRequiredDiv.classList.remove('hidden'); // Show login required message
+                                if (feedbackForm) feedbackForm.classList.add('hidden'); // Hide form
+                                if (feedbackDescriptionText) feedbackDescriptionText.classList.add('hidden'); // Hide description
+                                debugLog('[core.js] User logged out: showing login required message, hiding form.');
+                            }
+                        };
+                        
+                        // Initial call to set visibility when modal is loaded
+                        toggleFeedbackFormVisibility();
+
+                        // Attach listener for the login button inside the feedback modal
+                        if (feedbackLoginButton) {
+                            feedbackLoginButton.addEventListener('click', () => {
+                                debugLog('[core.js] Feedback modal login button clicked, redirecting to Google auth.');
+                                window.location.href = '/auth/google'; // Redirect to Google login
+                            });
+                        }
+
+                        // IMPORTANT: Override window.showModal to call toggleFeedbackFormVisibility
+                        // when the feedback modal is shown. This ensures state is correct on open.
+                        const originalShowModal = window.showModal; // Save original for other modals
+                        window.showModal = function(id) {
+                            originalShowModal(id); // Call original showModal
+                            if (id === 'feedbackModal') {
+                                toggleFeedbackFormVisibility(); // Update form visibility specifically for feedback modal
+                            }
+                        };
+                        // =======================================================
+                        // END NEW FUNCTION
+                        // =======================================================
+
+                        if (feedbackForm) {
+                            feedbackForm.addEventListener('submit', async (e) => {
+                                e.preventDefault();
+                                // This client-side check is now a double-safety. The UI should prevent this.
+                                if (!window.isLoggedIn) {
+                                    window.showToast('You must be logged in to submit feedback. Please log in first.', 'error');
+                                    return;
+                                }
+
+                                const formData = new FormData(feedbackForm);
+                                const payload = Object.fromEntries(formData);
+
+                                try {
+                                    const response = await fetch(feedbackForm.action, {
+                                        method: feedbackForm.method,
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'CSRF-Token': document.querySelector('meta[name="csrf-token"]') ? document.querySelector('meta[name="csrf-token"]').content : ''
+                                        },
+                                        body: JSON.stringify(payload)
+                                    });
+
+                                    if (response.ok) {
+                                        const result = await response.json();
+                                        window.showToast('Feedback submitted successfully! Thank you for your input.', 'success'); 
+                                        hideFeedbackModal();
+                                        feedbackForm.reset();
+                                    } else {
+                                        const errorData = await response.json();
+                                        window.showToast(`Error submitting feedback: ${errorData.message || response.statusText}`, 'error');
+                                    }
+                                } catch (error) {
+                                    console.error('Network error or unexpected issue:', error);
+                                    window.showToast('Could not connect to the server to submit feedback. Please check your internet connection.', 'error');
+                                }
+                            });
+                            debugLog('[core.js] Feedback form submit listener attached.');
+                        }
+                        // --- End Feedback Modal Logic ---
+
+
+                        // --- Your existing modal logic for other modals (buy tokens, welcome, about) ---
+                        // Re-get references to elements after HTML is loaded
+                        // Ensure all elements here are also obtained *after* the HTML is injected
+                        const tokensButton = document.getElementById('tokens-button');
+                        if (tokensButton) {
+                            tokensButton.addEventListener('click', () => {
+                                if (!window.isLoggedIn) {
+                                    window.showToast('Please log in to buy credits.', 'error');
+                                    window.location.href = '/auth/google';
+                                    return;
+                                }
+                                window.showModal('buy-tokens-modal');
+                            });
+                            debugLog('[core.js] Tokens button listener attached.');
+                        }
+                        
+                        const buyTokensModal = document.getElementById('buy-tokens-modal');
+                        const welcomeModal = document.getElementById('welcome-modal'); 
+                        const closeBuyTokensModal = document.getElementById('close-buy-tokens-modal');
+                        if (closeBuyTokensModal) {
+                            closeBuyTokensModal.addEventListener('click', () => window.hideModal('buy-tokens-modal'));
+                            debugLog('[core.js] Buy Tokens modal close button listener attached.');
+                        }
+
+                        const stripePublishableKey = 'pk_live_51QNNomGgZQx5JKvIyEzYuHbqZRdugWTVlseapCphcAL3gYdrXfSIN8R6toeaReScar1gFyxRODHv0XG1cf54xUsM00zJcyWw8j';
+                        let stripe = null;
+                        if (typeof Stripe === 'function') {
+                            stripe = Stripe(stripePublishableKey);
+                        } else {
+                            console.error('[core.js] Stripe.js not loaded. Make sure it\'s included in your HTML.');
+                            window.showToast('Payment system error. Please contact support.', 'error');
+                        }
+                        const buyTokensForm = document.getElementById('buy-tokens-form');
+                        if (buyTokensForm && stripe) {
+                            buyTokensForm.addEventListener('submit', async (e) => {
+                                e.preventDefault();
+                                const bundleSelect = document.getElementById('token-bundle');
+                                const tokens = bundleSelect.value;
+                                const selectedOption = bundleSelect.options[bundleSelect.selectedIndex];
+                                const price = selectedOption.getAttribute('data-price');
+                                if (!price) {
+                                    console.error('[core.js] Missing data-price attribute on selected token bundle option.');
+                                    window.showToast('Configuration error. Please select a valid bundle.', 'error');
+                                    return;
+                                }
+                                try {
+                                    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                                    const response = await fetch('/payment/create-checkout-session', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'X-CSRF-Token': csrfToken
+                                        },
+                                        body: JSON.stringify({ tokens: tokens, price: price })
+                                    });
+                                    if (!response.ok) {
+                                        const errorData = await response.json();
+                                        throw new Error(errorData.error || `Server error: ${response.status}`);
+                                    }
+                                    const { sessionId } = await response.json();
+                                    const { error } = await stripe.redirectToCheckout({ sessionId });
+                                    if (error) {
+                                        throw new Error(error.message || 'Failed to redirect to payment.');
+                                    }
+                                } catch (error) {
+                                    console.error('[core.js] Error during token purchase:', error);
+                                    window.showToast(`Payment failed: ${error.message}. Please try again.`, 'error');
+                                }
+                            });
+                            debugLog('[core.js] Buy Tokens form submit listener attached.');
+                        }
+
+                        if (!localStorage.getItem('welcomeShown')) {
+                            originalShowModal('welcome-modal'); // Use originalShowModal here to avoid recursive call
+                            localStorage.setItem('welcomeShown', 'true');
+                            debugLog('[core.js] Welcome modal shown (first visit).');
+                        }
+                        const closeWelcomeModal = document.getElementById('close-welcome-modal');
+                        if (closeWelcomeModal) {
+                            closeWelcomeModal.addEventListener('click', () => window.hideModal('welcome-modal'));
+                            debugLog('[core.js] Welcome modal close button listener attached.');
+                        }
+                        const closeWelcomeModalBtn = document.getElementById('close-welcome-modal-btn');
+                        if (closeWelcomeModalBtn) {
+                            closeWelcomeModalBtn.addEventListener('click', () => window.hideModal('welcome-modal'));
+                            debugLog('[core.js] Welcome modal secondary close button listener attached.');
+                        }
+                        const registerWithGoogle = document.getElementById('register-with-google');
+                        if (registerWithGoogle) {
+                            registerWithGoogle.addEventListener('click', () => {
+                                window.location.href = '/auth/google';
+                                window.hideModal('welcome-modal');
+                            });
+                            debugLog('[core.js] Register with Google listener attached.');
+                        }
+                        const closeAboutPopup = document.getElementById('close-about-popup');
+                        if (closeAboutPopup) {
+                            closeAboutPopup.addEventListener('click', () => window.hideModal('about-popup'));
+                            debugLog('[core.js] About popup close button listener attached.');
+                        }
+                        const closeAboutPopupBtn = document.getElementById('close-about-popup-btn');
+                        if (closeAboutPopupBtn) {
+                            closeAboutPopupBtn.addEventListener('click', () => window.hideModal('about-popup'));
+                            debugLog('[core.js] About popup secondary close button listener attached.');
+                        }
+                        
+                        const currentContentArea = document.getElementById('content-area');
+                        if (currentContentArea) {
+                            currentContentArea.addEventListener('click', (e) => {
+                                if (e.target.id === 'about-link') {
+                                    e.preventDefault();
+                                    originalShowModal('about-popup'); // Use originalShowModal
+                                    debugLog('[core.js] About link clicked, opening popup.');
+                                }
+                            });
+                        } else {
+                            console.warn('[core.js] contentArea not found for about-link listener.');
+                        }
+
                     } else {
                         console.error('[core.js] modals-container not found');
-                    }
-                    window.showModal = function(id) {
-                        const modal = document.getElementById(id);
-                        if (modal) {
-                            modal.classList.remove('hidden');
-                            debugLog(`[core.js] Modal ${id} shown`);
-                        } else {
-                            console.error(`[core.js] Modal with ID ${id} not found`);
-                        }
-                    };
-                    window.hideModal = function(id) {
-                        const modal = document.getElementById(id);
-                        if (modal) {
-                            modal.classList.add('hidden');
-                            debugLog(`[core.js] Modal ${id} hidden`);
-                        } else {
-                            console.error(`[core.js] Modal with ID ${id} not found`);
-                        }
-                    };
-                    const tokensButton = document.getElementById('tokens-button');
-                    if (tokensButton) {
-                        tokensButton.addEventListener('click', () => {
-                            if (!window.isLoggedIn) {
-                                window.showToast('Please log in to buy credits.', 'error');
-                                window.location.href = '/auth/google';
-                                return;
-                            }
-                            window.showModal('buy-tokens-modal');
-                        });
-                    }
-                    const buyTokensModal = document.getElementById('buy-tokens-modal');
-                    const welcomeModal = document.getElementById('welcome-modal');
-                    const closeBuyTokensModal = document.getElementById('close-buy-tokens-modal');
-                    if (closeBuyTokensModal) {
-                        closeBuyTokensModal.addEventListener('click', () => window.hideModal('buy-tokens-modal'));
-                    }
-
-                    const stripePublishableKey = 'pk_live_51QNNomGgZQx5JKvIyEzYuHbqZRdugWTVlseapCphcAL3gYdrXfSIN8R6toeaReScar1gFyxRODHv0XG1cf54xUsM00zJcyWw8j';
-                
-                    //const stripePublishableKey = 'pk_test_51QNNomGgZQx5JKvI2PAzM2GO5f0ukOcam2RUMj0ceduOPIuoRmWgqt7nqs46lRF7eyKd46Q8MRs1OYX76xi7fxHQ00LwfUHss5';
-                    let stripe = null;
-                    if (typeof Stripe === 'function') {
-                        stripe = Stripe(stripePublishableKey);
-                    } else {
-                        console.error('[core.js] Stripe.js not loaded. Make sure it\'s included in your HTML.');
-                        window.showToast('Payment system error. Please contact support.', 'error');
-                    }
-                    const buyTokensForm = document.getElementById('buy-tokens-form');
-                    if (buyTokensForm && stripe) {
-                        buyTokensForm.addEventListener('submit', async (e) => {
-                            e.preventDefault();
-                            const bundleSelect = document.getElementById('token-bundle');
-                            const tokens = bundleSelect.value;
-                            const selectedOption = bundleSelect.options[bundleSelect.selectedIndex];
-                            const price = selectedOption.getAttribute('data-price');
-                            if (!price) {
-                                console.error('[core.js] Missing data-price attribute on selected token bundle option.');
-                                window.showToast('Configuration error. Please select a valid bundle.', 'error');
-                                return;
-                            }
-                            try {
-                                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-                                const response = await fetch('/payment/create-checkout-session', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-CSRF-Token': csrfToken
-                                    },
-                                    body: JSON.stringify({ tokens: tokens, price: price })
-                                });
-                                if (!response.ok) {
-                                    const errorData = await response.json();
-                                    throw new Error(errorData.error || `Server error: ${response.status}`);
-                                }
-                                const { sessionId } = await response.json();
-                                const { error } = await stripe.redirectToCheckout({ sessionId });
-                                if (error) {
-                                    throw new Error(error.message || 'Failed to redirect to payment.');
-                                }
-                            } catch (error) {
-                                console.error('[core.js] Error during token purchase:', error);
-                                window.showToast(`Payment failed: ${error.message}. Please try again.`, 'error');
-                            }
-                        });
-                    }
-                    if (!localStorage.getItem('welcomeShown')) {
-                        window.showModal('welcome-modal');
-                        localStorage.setItem('welcomeShown', 'true');
-                    }
-                    const closeWelcomeModal = document.getElementById('close-welcome-modal');
-                    if (closeWelcomeModal) {
-                        closeWelcomeModal.addEventListener('click', () => window.hideModal('welcome-modal'));
-                    }
-                    const closeWelcomeModalBtn = document.getElementById('close-welcome-modal-btn');
-                    if (closeWelcomeModalBtn) {
-                        closeWelcomeModalBtn.addEventListener('click', () => window.hideModal('welcome-modal'));
-                    }
-                    const registerWithGoogle = document.getElementById('register-with-google');
-                    if (registerWithGoogle) {
-                        registerWithGoogle.addEventListener('click', () => {
-                            window.location.href = '/auth/google';
-                            window.hideModal('welcome-modal');
-                        });
-                    }
-                    const closeAboutPopup = document.getElementById('close-about-popup');
-                    if (closeAboutPopup) {
-                        closeAboutPopup.addEventListener('click', () => window.hideModal('about-popup'));
-                    }
-                    const closeAboutPopupBtn = document.getElementById('close-about-popup-btn');
-                    if (closeAboutPopupBtn) {
-                        closeAboutPopupBtn.addEventListener('click', () => window.hideModal('about-popup'));
-                    }
-                    const contentArea = document.getElementById('content-area');
-                    if (contentArea) {
-                        contentArea.addEventListener('click', (e) => {
-                            if (e.target.id === 'about-link') {
-                                e.preventDefault();
-                                window.showModal('about-popup');
-                            }
-                        });
+                        window.showToast('Modal container missing. Please refresh.', 'error');
                     }
                 })
                 .catch(error => {
                     console.error('[core.js] Error fetching or setting up modals:', error);
+                    window.showToast('Failed to load site modals. Please refresh.', 'error');
                 });
         });
     } catch (error) {
         console.error('[core.js] Modals initialization error:', error);
+        window.showToast('A critical error occurred with modals. Please refresh.', 'error');
     }
+
 } catch (error) {
     console.error('[core.js] Top-level error:', error);
 }
-// Removed automatic call to loadChatTab on initial page load.
-// The server should render the initial state (e.g., with splash screen).
-// window.isContentAreaDisplayingNewSession should be false initially (set in layout.ejs).
+
 debugLog('[core.js] Initial UI load is now handled by server-side rendering or specific user actions.');

@@ -1,23 +1,108 @@
-// Ensure you have these imports at the top:
+//  routes\api.js
 const express = require('express');
 const router = express.Router();
 const { User, GeneratedContent, ImageComment, ChatSession, ImageLike } = require('../db');
-const { isAuthenticated } = require('../middleware/authMiddleware');
-// You also mentioned generalUpload and UPLOAD_DIR, make sure they are imported if used
+const { isAuthenticated, isAdminApi } = require('../middleware/authMiddleware');
 const { generalUpload, UPLOAD_DIR } = require('../config/multerConfig');
-const fs = require('fs').promises;
+
+// --- CHANGE IS HERE ---
+const fs = require('fs'); // Import standard fs module for synchronous operations (existsSync, mkdirSync)
+const fsp = require('fs').promises; // Import promise-based fs API for async operations (appendFile)
+// --- END CHANGE ---
+
 const path = require('path');
 const sharp = require('sharp');
-const { Sequelize } = require('sequelize'); // IMPORTANT: Make sure Sequelize is imported
+const { Sequelize } = require('sequelize');
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const { uploadImageBufferToGcs } = require('../utils/gcsUtils');
-const { Op } = require('sequelize'); // IMPORTANT: Make sure Op is imported
+const { Op } = require('sequelize');
 
+// Define the directory where feedback will be stored
+const feedbackDir = path.join(__dirname, '..', 'feedback'); // '..' goes up one level from 'routes'
+const feedbackFilePath = path.join(feedbackDir, 'feedback.txt');
+
+// Ensure the feedback directory exists
+// These now correctly use the standard 'fs' module
+if (!fs.existsSync(feedbackDir)) {
+    fs.mkdirSync(feedbackDir, { recursive: true });
+    console.log(`Created feedback directory: ${feedbackDir}`);
+}
+
+// Example: Simple endpoint to receive feedback
+router.post('/feedback', isAuthenticated, async (req, res) => {
+    const { type, description } = req.body;
+    const userId = req.user ? req.user.id : 'anonymous'; // Get user ID if logged in
+    const timestamp = new Date().toISOString(); // Get current timestamp
+
+    if (!type || !description) {
+        return res.status(400).json({ message: 'Type and description are required.' });
+    }
+
+    try {
+        // Format the feedback string
+        const feedbackEntry = `
+----------------------------------
+Timestamp: ${timestamp}
+User ID: ${userId}
+Issue Type: ${type}
+Description:
+${description}
+----------------------------------
+`;
+
+        // Append the feedback to the feedback.txt file
+        // This now correctly uses the promise-based 'fsp' module
+        await fsp.appendFile(feedbackFilePath, feedbackEntry + '\n'); // Add newline for readability
+
+        console.log(`Feedback from ${userId} (${type}) logged to ${feedbackFilePath}`);
+        res.status(200).json({ message: 'Feedback received successfully!' });
+
+    } catch (error) {
+        console.error('Failed to process feedback or write to file:', error);
+        res.status(500).json({ message: 'Failed to submit feedback due to a server error. Please try again later.' });
+    }
+});
+
+
+
+
+// NEW ADMIN ROUTE: Get All User Stats
+router.get('/admin/user-stats', isAdminApi, async (req, res) => {
+    console.log('[API Admin] Fetching user stats (access granted).');
+
+    try {
+        const users = await User.findAll({
+            attributes: [
+                'id',
+                'username',
+                'email',
+                'credits',
+                'createdAt',
+                // Use the alias 'generatedContents' here
+                [Sequelize.fn('COUNT', Sequelize.col('generatedContents.id')), 'imageCount']
+            ],
+            include: [{
+                model: GeneratedContent,
+                as: 'generatedContents', // <-- THIS IS THE CRUCIAL ADDITION
+                attributes: [],
+                duplicating: false
+            }],
+            group: ['User.id'],
+            order: [['createdAt', 'ASC']]
+        });
+
+        console.log(`[API Admin] Found ${users.length} users with stats.`);
+        res.json(users);
+    } catch (error) {
+        console.error('[API Admin] Error fetching user stats:', error);
+        res.status(500).json({ error: 'Failed to retrieve user statistics.' });
+    }
+});
+
+// ... (rest of your existing routes) ...
 
 // GET User Files (Protected, Paginated)
-// This is the route for 'My Files'
-//router.get('/files', isAuthenticated, async (req, res) => {
 router.get('/files', isAuthenticated, async (req, res) => {
     const userId = req.user.id;
     const page = parseInt(req.query.page) || 1;
