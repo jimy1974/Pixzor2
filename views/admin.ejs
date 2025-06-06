@@ -28,13 +28,40 @@
     </div>
 </div>
 
+
+
+<div class="container mx-auto p-4 mt-8">
+    <div class="bg-white dark:bg-gray-700 shadow-md rounded-lg p-6">
+        <h2 class="text-xl font-semibold mb-4 text-gray-700 dark:text-gray-200">Thumbnail Generation</h2>
+        <p class="text-gray-600 dark:text-gray-300 mb-4">
+            This tool will generate thumbnails for all existing images that currently do not have them.
+            This might take a while depending on the number of images.
+        </p>
+        <button id="generateThumbnailsBtn" 
+                class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg 
+                       focus:outline-none focus:shadow-outline transition duration-150 ease-in-out">
+            Generate Missing Thumbnails
+        </button>
+        <div id="thumbnailStatus" class="mt-4 text-gray-700 dark:text-gray-200"></div>
+    </div>
+</div>
+
+
 <script>
+    
+    
+    const csrfToken = "<%= csrfToken %>";
+    console.log("CSRF Token from EJS:", csrfToken); // <--- ADD THIS LINE
+    
     document.addEventListener('DOMContentLoaded', async () => {
         const loadingMessage = document.getElementById('loadingMessage');
         const errorMessage = document.getElementById('errorMessage');
         const userStatsBody = document.getElementById('userStatsBody');
 
         try {
+            
+            console.log("Sending POST request with X-CSRF-Token:", csrfToken); // <--- ADD THIS LINE
+            
             const response = await fetch('/api/admin/user-stats');
             if (!response.ok) {
                 // Handle different error statuses
@@ -76,6 +103,41 @@
             errorMessage.textContent = 'An unexpected error occurred while loading data.';
             errorMessage.classList.remove('hidden');
             loadingMessage.classList.add('hidden');
+        }
+    });
+    
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        const generateThumbnailsBtn = document.getElementById('generateThumbnailsBtn');
+        const thumbnailStatus = document.getElementById('thumbnailStatus');
+
+        if (generateThumbnailsBtn) {
+            generateThumbnailsBtn.addEventListener('click', async () => {
+                thumbnailStatus.innerHTML = '<span class="text-blue-500">Generating thumbnails... This may take a while. Do not close this page.</span>';
+                generateThumbnailsBtn.disabled = true; // Disable button during process
+
+                try {
+                    const response = await fetch('/api/admin/generate-missing-thumbnails', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.message || 'Failed to generate thumbnails');
+                    }
+
+                    const result = await response.json();
+                    thumbnailStatus.innerHTML = `<span class="text-green-500">${result.message}</span>`;
+                } catch (error) {
+                    console.error('Error generating thumbnails:', error);
+                    thumbnailStatus.innerHTML = `<span class="text-red-500">Error: ${error.message}</span>`;
+                } finally {
+                    generateThumbnailsBtn.disabled = false; // Re-enable button
+                }
+            });
         }
     });
 </script>

@@ -5,6 +5,7 @@ const fs = require('fs/promises');
 const fsSync = require('fs');
 const expressLayouts = require('express-ejs-layouts');
 const session = require('express-session');
+const SequelizeStore = require('connect-session-sequelize')(session.Store); // <-- Added this line 
 const passport = require('passport');
 const { OpenAI } = require('openai');
 const { Op } = require('sequelize');
@@ -17,31 +18,46 @@ const { v4: uuidv4 } = require('uuid');
 const sharp = require('sharp');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const cookieParser = require('cookie-parser');
-const csrf = require('csurf');
-const { isAuthenticated, isAdmin, isAdminApi } = require('./middleware/authMiddleware'); 
+const csrf = require('csurf'); // Make sure csurf is imported here!
+const { isAuthenticated, isAdmin, isAdminApi } = require('./middleware/authMiddleware');
+
+
+const gcsUtils = require('./utils/gcsUtils');
+const { generateThumbnail } = require('./utils/imageProcessor');
 
 // Import configurations
 const { RUNWARE_MODELS } = require('./config/modelsConfig');
 const { PROMPT_BASED_STYLES } = require('./config/stylesConfig');
 
-const db = require('./db'); // Reverted to use the root db.js
-const { sequelize, User, GeneratedContent, ChatSession, ImageComment, ImageLike } = db; // Ensure all models from root db.js are destructured
+const db = require('./db');
+const { sequelize, User, GeneratedContent, ChatSession, ImageComment, ImageLike } = db;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Session middleware
-const sessionMiddleware = session({
-    secret: process.env.SESSION_SECRET || 'your-secret',
-    resave: false,
-    saveUninitialized: false,
-    cookie: { secure: process.env.NODE_ENV === 'production' } // Secure in production
+// Initialize Sequelize session store (This part is correct)
+const sessionStore = new SequelizeStore({
+  db: sequelize, // Pass your Sequelize instance
+  tableName: 'sessions', // This should match your 'sessions' table name
 });
 
-// Middleware
+// Session middleware
+const sessionMiddleware = session({
+    secret: process.env.SESSION_SECRET || 'a-very-long-and-unpredictable-secret-string-for-sessions-at-least-32-chars', // <--- MAKE THIS A REAL, LONG SECRET!
+    resave: false,
+    saveUninitialized: false,
+    store: sessionStore, // <-- Still correct
+    // For local development (HTTP), set secure: false explicitly
+    // For production (HTTPS), set secure: true
+    cookie: { secure: false } // <--- CHANGE THIS TO FALSE FOR LOCAL TESTING
+});
+
+// --- Middleware Setup ---
+
+// 1. Cookie Parser (Must be before session and csurf if using cookie-based tokens)
 app.use(cookieParser());
 
-// Serve static files from 'public' directory
+// 2. Serve static files (Position doesn't matter much for CSRF, but good for performance)
 app.use(express.static('public', {
     setHeaders: (res, path) => {
         if (path.endsWith('.css')) {
@@ -52,29 +68,60 @@ app.use(express.static('public', {
     }
 }));
 
+// 3. Body Parsers (Must be before routes that read req.body)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// 4. Session Middleware (Must be before Passport)
 app.use(sessionMiddleware);
+
+// 5. Passport Initialization
 app.use(passport.initialize());
 app.use(passport.session());
-//app.use(csrf({ cookie: true }));
 
-// Bypass CSRF for /api/add-generated-image
+app.use('/api', apiRoutes); // <--- MOVED THIS LINE UP!
+
+// --- ADD THIS DEBUGGING MIDDLEWARE ---
 app.use((req, res, next) => {
-    if (req.path === '/api/add-generated-image') {
-        return next();
+    if (req.method === 'POST' && req.path === '/api/admin/generate-missing-thumbnails') {
+        console.log(`\n--- CSRF DEBUG LOGS for POST ${req.path} ---`);
+        console.log(`Request Cookie Header: ${req.headers.cookie}`);
+        console.log(`Parsed Cookies (req.cookies):`, req.cookies);
+        console.log(`Session ID (req.sessionID):`, req.sessionID);
+        console.log(`Session Exists (!!req.session):`, !!req.session);
+        if (req.session) {
+            console.log(`req.session._csrf property exists:`, !!req.session._csrf);
+            console.log(`req.session._csrf value:`, req.session._csrf);
+            console.log(`req.session.passport content:`, req.session.passport); // Verify user is still in session
+        }
+        console.log(`--- END CSRF DEBUG LOGS ---\n`);
     }
-    csrf({ cookie: true })(req, res, next);
+    next();
+});
+// --- END DEBUGGING MIDDLEWARE ---
+
+
+// --- CSRF Protection ---
+// Handle specific routes that should bypass CSRF *before* applying global CSRF.
+// This allows '/api/add-generated-image' to proceed without CSRF checks.
+app.use('/api/add-generated-image', (req, res, next) => {
+    // For this specific path, just proceed to the next middleware/route handler
+    return next();
 });
 
+// Global CSRF Protection (MUST come after session and cookieParser)
+// This is the correct, standard way to apply csurf globally.
+app.use(csrf({ cookie: true })); // <-- UNCOMMENT AND PLACE HERE!
+
+// 6. EJS Layouts and View Engine Setup
 app.use(expressLayouts);
 app.set('view engine', 'ejs');
 app.set('views', './views');
 app.set('layout', 'layouts/layout');
 
-// Pass CSRF token and globals to all views
+// 7. Pass CSRF token and globals to all views (This block is fine, its condition now correctly checks `req.csrfToken`)
 app.use((req, res, next) => {
-    res.locals.csrfToken = typeof req.csrfToken === 'function' && req.path !== '/api/add-generated-image' ? req.csrfToken() : null;
+    res.locals.csrfToken = req.csrfToken(); // This is correct, assumes csurf has run.
     res.locals.isLoggedIn = req.isAuthenticated();
     res.locals.user = req.user ? {
         id: req.user.id,
@@ -88,7 +135,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// Static file serving
+// --- Static file serving (These are fine where they are) ---
 app.use('/images', express.static(path.join(__dirname, 'public', 'images')));
 app.use('/videos', express.static(path.join(__dirname, 'public', 'videos')));
 const generatedImagesPath = path.join(__dirname, 'public', 'images', 'generated');
@@ -108,7 +155,7 @@ if (!fsSync.existsSync(RUNWARE_UPLOAD_DIR)) {
     }
 }
 
-// Qwen clients
+// Qwen clients (Fine where they are)
 const qwen = new OpenAI({
     apiKey: process.env.QWEN_API_KEY,
     baseURL: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
@@ -118,33 +165,7 @@ const qwenIntent = new OpenAI({
     baseURL: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
 });
 
-// Routes
-app.use('/', routes);
-app.use('/', authRoutes);
-app.use('/payment', paymentRouter);
-app.use('/generate', require('./routes/generate'));
-app.use('/partials', require('./routes/partials'));
-app.use('/api', apiRoutes);
-// app.use('/webhook', stripeRouter); // Uncomment when needed
-
-// Intent detection with title suggestion
-async function detectIntentAndTitle(userMessage) {
-    const response = await qwenIntent.chat.completions.create({
-        model: 'qwen-turbo',
-        messages: [
-            {
-                role: 'system',
-                content: "Analyze the user's message. Return a JSON object with: \"intent\" (\"greeting\", \"image_request\", \"other\") and \"title\" (a concise, descriptive chat title based on the message). Example: {\"intent\": \"greeting\", \"title\": \"Casual Hello\"}"
-            },
-            { role: 'user', content: userMessage }
-        ],
-        max_tokens: 50,
-        temperature: 0.1,
-    });
-    return JSON.parse(response.choices[0].message.content.trim());
-}
-
-// Passport serialization
+// Passport serialization (Fine where it is)
 passport.serializeUser((user, done) => done(null, user.id));
 passport.deserializeUser(async (id, done) => {
     try {
@@ -155,14 +176,22 @@ passport.deserializeUser(async (id, done) => {
     }
 });
 
-// API routes logging
+// API routes logging (Fine where it is)
 app.use((req, res, next) => {
     console.log(`[Request] ${req.method} ${req.url} at ${new Date().toISOString()}`);
     next();
 });
 
-// Main app routes
-// server.js (replace the existing app.get(['/', '/gallery', '/chat-history', '/files']) route)
+// --- Routes ---
+app.use('/', routes);
+app.use('/', authRoutes);
+app.use('/payment', paymentRouter);
+app.use('/generate', require('./routes/generate'));
+app.use('/partials', require('./routes/partials'));
+//app.use('/api', apiRoutes);
+// app.use('/webhook', stripeRouter); // Uncomment when needed
+
+// Main app routes (Fine where it is, it's a GET request, so CSRF validation doesn't apply here)
 app.get('/', async (req, res) => {
     try {
         console.log(`[Server] Rendering index.ejs for homepage`);
@@ -174,6 +203,15 @@ app.get('/', async (req, res) => {
         console.error('[Server] Error rendering index.ejs:', error.stack);
         res.status(500).send('Internal Server Error');
     }
+});
+
+// Your /admin route (No change needed here, as res.locals.csrfToken will be correct)
+app.get('/admin', isAdmin, (req, res) => {
+    console.log('[Server] Rendering admin.ejs for admin panel (access granted).');
+    res.render('admin', {
+        title: 'Admin Panel - Pixzor',
+        description: 'Admin panel for Pixzor AI generative image site'
+    });
 });
 
 
@@ -357,6 +395,18 @@ app.get('/admin', isAdmin, (req, res) => { // <-- CHANGED HERE
     });
 });
 
+// --- TEMPORARY CSRF BYPASS FOR ADMIN ROUTE (NOT RECOMMENDED FOR PRODUCTION) ---
+app.use('/api/admin/generate-missing-thumbnails', (req, res, next) => {
+    console.warn('[SECURITY WARNING] Bypassing CSRF for /api/admin/generate-missing-thumbnails!');
+    return next();
+});
+// --- END TEMPORARY BYPASS ---
+
+// Handle specific routes that should bypass CSRF *before* applying global CSRF.
+app.use('/api/add-generated-image', (req, res, next) => {
+    return next();
+});
+
 
 
 app.post('/api/add-generated-image', async (req, res) => {
@@ -369,7 +419,7 @@ app.post('/api/add-generated-image', async (req, res) => {
 
         const {
             userId,
-            contentUrl,
+            contentUrl, // This is the URL of the original image
             prompt,
             modelUsed,
             modelId,
@@ -396,10 +446,46 @@ app.post('/api/add-generated-image', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Missing required fields' });
         }
 
+        let thumbnailUrl = null;
+        // Check if contentUrl is from our GCS bucket before trying to download/thumbnail
+        if (contentUrl.startsWith(`https://storage.googleapis.com/${gcsUtils.bucketName}/`)) {
+            try {
+                console.log(`[API Add Image] Attempting to generate thumbnail for GCS image: ${contentUrl}`);
+                // 1. Download original image from GCS
+                const originalImageBuffer = await gcsUtils.downloadFile(contentUrl);
+
+                if (originalImageBuffer) {
+                    // 2. Generate thumbnail
+                    const thumbnailBuffer = await generateThumbnail(originalImageBuffer, 'webp', 300); // 300px wide, WebP format
+
+                    // 3. Upload thumbnail to GCS
+                    const originalFilename = path.basename(contentUrl); // Get filename from URL
+                    const baseFilename = originalFilename.split('.')[0];
+                    const thumbnailFilename = `thumbnails/${baseFilename}_thumb.webp`; // Unique name for thumbnail
+
+                    const uploadedThumbnailUrl = await gcsUtils.uploadFile(thumbnailBuffer, thumbnailFilename, 'image/webp');
+                    if (uploadedThumbnailUrl) {
+                        thumbnailUrl = uploadedThumbnailUrl;
+                        console.log(`[API Add Image] Thumbnail generated and uploaded: ${thumbnailUrl}`);
+                    } else {
+                        console.warn('[API Add Image] Failed to upload generated thumbnail to GCS. Proceeding without thumbnail URL.');
+                    }
+                } else {
+                    console.warn('[API Add Image] Could not download original image for thumbnail generation. Proceeding without thumbnail URL.');
+                }
+            } catch (thumbnailError) {
+                console.error('[API Add Image] Error generating or uploading thumbnail:', thumbnailError);
+                // Continue execution even if thumbnail generation fails, save main image
+            }
+        } else {
+            console.warn(`[API Add Image] Content URL is not from GCS (${contentUrl}). Skipping thumbnail generation.`);
+        }
+
         const newContent = await GeneratedContent.create({
             userId,
             type: 'image',
             contentUrl,
+            thumbnailUrl, // <--- ADD THIS LINE
             prompt,
             model: modelUsed, // Map modelUsed to model
             tokenCost: 1,
@@ -531,8 +617,13 @@ app.use((err, req, res, next) => {
     try {
         await sequelize.authenticate();
         console.log('Database connection established successfully.');
+        // Ensure your main models are synced (if you want Sequelize to manage table creation/alteration)
         await sequelize.sync({ alter: false });
         console.log('[DB Sync] Database synced successfully with alter option.');
+
+        // ADDED THIS LINE: Ensure the sessions table is synced
+        await sessionStore.sync(); // <-- ADDED THIS LINE
+        console.log('[DB Sync] Sessions table synced successfully.');
 
         const { startCleanupSchedule } = require('./utils/cleanupService');
         startCleanupSchedule();

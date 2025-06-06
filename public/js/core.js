@@ -898,7 +898,8 @@ try {
                                 fileCard.dataset.prompt = item.prompt || ''; // Store prompt for modal if needed
 
                                 fileCard.innerHTML = `
-                                    <img src="${item.image}" alt="File thumbnail" class="w-full h-full object-cover rounded-lg transition-transform duration-200 ease-in-out group-hover:scale-105" loading="lazy">
+                                    <img src="${item.thumbnailUrl ?? item.contentUrl}" alt="File thumbnail" class="w-full h-full object-cover rounded-lg transition-transform duration-200 ease-in-out group-hover:scale-105"  loading="lazy">
+                                        
                                     <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity duration-200 ease-in-out rounded-lg"></div>
                                       
                                       
