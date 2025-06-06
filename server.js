@@ -1,4 +1,7 @@
+// server.js - Updated with Conditional CSRF Protection
+
 require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
+
 const express = require('express');
 const path = require('path');
 const fs = require('fs/promises');
@@ -30,6 +33,8 @@ const { PROMPT_BASED_STYLES } = require('./config/stylesConfig');
 
 const db = require('./db');
 const { sequelize, User, GeneratedContent, ChatSession, ImageComment, ImageLike } = db;
+// Ensure ChatMessage is imported if used later, as indicated by the delete route
+const ChatMessage = require('./db').ChatMessage; // Assuming ChatMessage is exposed by db.js
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -49,7 +54,7 @@ const sessionMiddleware = session({
     cookie: { secure: false } // <--- CHANGE THIS TO TRUE FOR PRODUCTION WITH HTTPS
 });
 
-// --- Middleware Setup ---
+// --- Middleware Setup (Order is crucial) ---
 
 // 1. Cookie Parser (Must be before session and csurf if using cookie-based tokens)
 app.use(cookieParser());
@@ -76,31 +81,40 @@ app.use(sessionMiddleware);
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Placing apiRoutes here ensures that /api routes are processed.
-// Any routes defined *within* apiRoutes will also adhere to middleware order.
-app.use('/api', apiRoutes);
+// --- Conditional CSRF Protection ---
+// Apply CSRF protection *only* to routes that are not explicitly excluded.
+// This is a robust way to bypass CSRF for specific API endpoints.
+const csrfProtection = csrf({ cookie: true });
 
-// --- IMPORTANT: CSRF BYPASSES MUST COME *BEFORE* THE GLOBAL CSRF MIDDLEWARE ---
-// This ensures that routes that should NOT have CSRF protection applied
-// are handled and skip the csurf middleware.
-
-// Bypass CSRF for /api/add-generated-image route (for Electron app)
-app.use('/api/add-generated-image', (req, res, next) => {
-    // This route is called by an Electron app, which doesn't handle browser-based CSRF tokens.
-    // We proceed to the next middleware/route handler without CSRF check.
-    return next();
-});
-
-// Bypass CSRF for admin thumbnail generation route (as per your existing intent)
-app.use('/api/admin/generate-missing-thumbnails', (req, res, next) => {
-    console.warn('[SECURITY WARNING] Bypassing CSRF for /api/admin/generate-missing-thumbnails!');
-    return next();
-});
-
-// --- Optional: Add debugging for specific routes *before* CSRF (keep if helpful, remove otherwise) ---
 app.use((req, res, next) => {
-    // This debugger is specifically for the admin thumbnail route, which is CSRF bypassed.
-    // Its position here is fine, as it's *before* the global CSRF, and *after* the bypass.
+    // List of paths to exclude from CSRF protection
+    // Add any other API paths that should be CSRF-free (e.g., external webhooks, API endpoints for non-browser clients)
+    const excludedPaths = [
+        '/api/add-generated-image',
+        '/api/admin/generate-missing-thumbnails',
+        // Example: '/webhook/stripe', // if Stripe webhook needs to be CSRF-free
+        // Example: '/api/some-other-external-api' // if another API needs to bypass CSRF
+    ];
+
+    // Check if the request path starts with any of the excluded paths
+    // This is more robust than strict equality for paths with parameters or query strings
+    const isExcluded = excludedPaths.some(pathPrefix => req.path.startsWith(pathPrefix));
+
+    if (isExcluded) {
+        console.log(`[CSRF Bypass] Skipping CSRF for: ${req.method} ${req.path}`);
+        return next(); // Skip CSRF protection for these paths
+    }
+
+    // Apply CSRF protection for all other paths
+    csrfProtection(req, res, next);
+});
+// --- END Conditional CSRF Protection ---
+
+
+// --- DEBUGGING MIDDLEWARE ---
+// This was your line 117. Its purpose is for logging, not CSRF handling.
+// Its position here is fine, as it runs for all requests before routing.
+app.use((req, res, next) => {
     if (req.method === 'POST' && req.path === '/api/admin/generate-missing-thumbnails') {
         console.log(`\n--- CSRF DEBUG LOGS for POST ${req.path} ---`);
         console.log(`Request Cookie Header: ${req.headers.cookie}`);
@@ -110,20 +124,13 @@ app.use((req, res, next) => {
         if (req.session) {
             console.log(`req.session._csrf property exists:`, !!req.session._csrf);
             console.log(`req.session._csrf value:`, req.session._csrf);
-            console.log(`req.session.passport content:`, req.session.passport); // Verify user is still in session
+            console.log(`req.session.passport content:`, req.session.passport);
         }
         console.log(`--- END CSRF DEBUG LOGS ---\n`);
     }
     next();
 });
 // --- END DEBUGGING MIDDLEWARE ---
-
-
-// Global CSRF Protection (MUST come after session and cookieParser, and *after* any specific bypasses)
-app.use(csrf({ cookie: true }));
-
-// --- REMOVED THE DUPLICATE CSRF BYPASS FOR /api/add-generated-image HERE ---
-// The correct bypass is now placed higher up, before the global csurf middleware.
 
 
 // 6. EJS Layouts and View Engine Setup
@@ -133,9 +140,10 @@ app.set('views', './views');
 app.set('layout', 'layouts/layout');
 
 // 7. Pass CSRF token and globals to all views
-// This should come after csurf, as it relies on req.csrfToken()
+// This needs to come *after* CSRF middleware for req.csrfToken() to be available.
+// If a route is bypassed from CSRF, req.csrfToken() might be undefined, so handle gracefully.
 app.use((req, res, next) => {
-    res.locals.csrfToken = req.csrfToken();
+    res.locals.csrfToken = req.csrfToken ? req.csrfToken() : null; // Safely get CSRF token
     res.locals.isLoggedIn = req.isAuthenticated();
     res.locals.user = req.user ? {
         id: req.user.id,
@@ -197,6 +205,9 @@ app.use((req, res, next) => {
 });
 
 // --- Routes ---
+// Place main routes here. For API routes handled by apiRoutes,
+// placing it after the conditional CSRF ensures CSRF is applied (unless bypassed).
+app.use('/api', apiRoutes);
 app.use('/', routes);
 app.use('/', authRoutes);
 app.use('/payment', paymentRouter);
@@ -396,8 +407,12 @@ app.get('/api/library/chats', async (req, res) => {
     }
 });
 
-
+// IMPORTANT: This app.post route must *not* be duplicated in routes/api.js
+// If it is, Express might match the one in apiRoutes before this one,
+// depending on internal routing and how apiRoutes is set up.
 app.post('/api/add-generated-image', async (req, res) => {
+    // Add a log here to confirm this handler is being hit
+    console.log('[API Add Image] Server.js explicit route handler hit.');
     try {
         const token = req.headers.authorization?.split('Bearer ')[1];
         if (process.env.WEBSITE_API_TOKEN && token !== process.env.WEBSITE_API_TOKEN) {
@@ -407,7 +422,7 @@ app.post('/api/add-generated-image', async (req, res) => {
 
         const {
             userId,
-            contentUrl, // This is the URL of the original image
+            contentUrl,
             prompt,
             modelUsed,
             modelId,
@@ -435,21 +450,16 @@ app.post('/api/add-generated-image', async (req, res) => {
         }
 
         let thumbnailUrl = null;
-        // Check if contentUrl is from our GCS bucket before trying to download/thumbnail
         if (contentUrl.startsWith(`https://storage.googleapis.com/${gcsUtils.bucketName}/`)) {
             try {
                 console.log(`[API Add Image] Attempting to generate thumbnail for GCS image: ${contentUrl}`);
-                // 1. Download original image from GCS
                 const originalImageBuffer = await gcsUtils.downloadFile(contentUrl);
 
                 if (originalImageBuffer) {
-                    // 2. Generate thumbnail
-                    const thumbnailBuffer = await generateThumbnail(originalImageBuffer, 'webp', 300); // 300px wide, WebP format
-
-                    // 3. Upload thumbnail to GCS
-                    const originalFilename = path.basename(contentUrl); // Get filename from URL
+                    const thumbnailBuffer = await generateThumbnail(originalImageBuffer, 'webp', 300);
+                    const originalFilename = path.basename(contentUrl);
                     const baseFilename = originalFilename.split('.')[0];
-                    const thumbnailFilename = `thumbnails/${baseFilename}_thumb.webp`; // Unique name for thumbnail
+                    const thumbnailFilename = `thumbnails/${baseFilename}_thumb.webp`;
 
                     const uploadedThumbnailUrl = await gcsUtils.uploadFile(thumbnailBuffer, thumbnailFilename, 'image/webp');
                     if (uploadedThumbnailUrl) {
@@ -463,7 +473,6 @@ app.post('/api/add-generated-image', async (req, res) => {
                 }
             } catch (thumbnailError) {
                 console.error('[API Add Image] Error generating or uploading thumbnail:', thumbnailError);
-                // Continue execution even if thumbnail generation fails, save main image
             }
         } else {
             console.warn(`[API Add Image] Content URL is not from GCS (${contentUrl}). Skipping thumbnail generation.`);
@@ -475,7 +484,7 @@ app.post('/api/add-generated-image', async (req, res) => {
             contentUrl,
             thumbnailUrl,
             prompt,
-            model: modelUsed, // Map modelUsed to model
+            model: modelUsed,
             tokenCost: 1,
             isPublic
         });
@@ -550,11 +559,6 @@ app.delete('/api/library/chats/:chatId', async (req, res) => {
     try {
         transaction = await sequelize.transaction();
 
-        // Assuming ChatMessage model exists and is imported from db.js
-        // If ChatMessage is not part of your current db.js or not used, this line might error.
-        // I've kept it as it was in your original code, assuming it's defined elsewhere or you will add it.
-        const ChatMessage = require('./db').ChatMessage; // Explicitly require if not in main db object
-
         const deletedMessagesCount = await ChatMessage.destroy({
             where: { chatSessionId: chatId },
             transaction
@@ -610,11 +614,8 @@ app.use((err, req, res, next) => {
     try {
         await sequelize.authenticate();
         console.log('Database connection established successfully.');
-        // Ensure your main models are synced (if you want Sequelize to manage table creation/alteration)
         await sequelize.sync({ alter: false });
         console.log('[DB Sync] Database synced successfully with alter option.');
-
-        // ADDED THIS LINE: Ensure the sessions table is synced
         await sessionStore.sync();
         console.log('[DB Sync] Sessions table synced successfully.');
 
