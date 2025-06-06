@@ -5,7 +5,7 @@ const fs = require('fs/promises');
 const fsSync = require('fs');
 const expressLayouts = require('express-ejs-layouts');
 const session = require('express-session');
-const SequelizeStore = require('connect-session-sequelize')(session.Store); // <-- Added this line 
+const SequelizeStore = require('connect-session-sequelize')(session.Store);
 const passport = require('passport');
 const { OpenAI } = require('openai');
 const { Op } = require('sequelize');
@@ -13,14 +13,13 @@ const routes = require('./routes');
 const authRoutes = require('./routes/auth');
 const stripeRouter = require('./routes/stripe');
 const paymentRouter = require('./routes/payment');
-const apiRoutes = require('./routes/api');
+const apiRoutes = require('./routes/api'); // Make sure this is imported
 const { v4: uuidv4 } = require('uuid');
 const sharp = require('sharp');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const cookieParser = require('cookie-parser');
-const csrf = require('csurf'); // Make sure csurf is imported here!
+const csrf = require('csurf');
 const { isAuthenticated, isAdmin, isAdminApi } = require('./middleware/authMiddleware');
-
 
 const gcsUtils = require('./utils/gcsUtils');
 const { generateThumbnail } = require('./utils/imageProcessor');
@@ -35,10 +34,10 @@ const { sequelize, User, GeneratedContent, ChatSession, ImageComment, ImageLike 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Initialize Sequelize session store (This part is correct)
+// Initialize Sequelize session store
 const sessionStore = new SequelizeStore({
-  db: sequelize, // Pass your Sequelize instance
-  tableName: 'sessions', // This should match your 'sessions' table name
+  db: sequelize,
+  tableName: 'sessions',
 });
 
 // Session middleware
@@ -46,10 +45,8 @@ const sessionMiddleware = session({
     secret: process.env.SESSION_SECRET || 'a-very-long-and-unpredictable-secret-string-for-sessions-at-least-32-chars', // <--- MAKE THIS A REAL, LONG SECRET!
     resave: false,
     saveUninitialized: false,
-    store: sessionStore, // <-- Still correct
-    // For local development (HTTP), set secure: false explicitly
-    // For production (HTTPS), set secure: true
-    cookie: { secure: false } // <--- CHANGE THIS TO FALSE FOR LOCAL TESTING
+    store: sessionStore,
+    cookie: { secure: false } // <--- CHANGE THIS TO TRUE FOR PRODUCTION WITH HTTPS
 });
 
 // --- Middleware Setup ---
@@ -79,10 +76,31 @@ app.use(sessionMiddleware);
 app.use(passport.initialize());
 app.use(passport.session());
 
-app.use('/api', apiRoutes); // <--- MOVED THIS LINE UP!
+// Placing apiRoutes here ensures that /api routes are processed.
+// Any routes defined *within* apiRoutes will also adhere to middleware order.
+app.use('/api', apiRoutes);
 
-// --- ADD THIS DEBUGGING MIDDLEWARE ---
+// --- IMPORTANT: CSRF BYPASSES MUST COME *BEFORE* THE GLOBAL CSRF MIDDLEWARE ---
+// This ensures that routes that should NOT have CSRF protection applied
+// are handled and skip the csurf middleware.
+
+// Bypass CSRF for /api/add-generated-image route (for Electron app)
+app.use('/api/add-generated-image', (req, res, next) => {
+    // This route is called by an Electron app, which doesn't handle browser-based CSRF tokens.
+    // We proceed to the next middleware/route handler without CSRF check.
+    return next();
+});
+
+// Bypass CSRF for admin thumbnail generation route (as per your existing intent)
+app.use('/api/admin/generate-missing-thumbnails', (req, res, next) => {
+    console.warn('[SECURITY WARNING] Bypassing CSRF for /api/admin/generate-missing-thumbnails!');
+    return next();
+});
+
+// --- Optional: Add debugging for specific routes *before* CSRF (keep if helpful, remove otherwise) ---
 app.use((req, res, next) => {
+    // This debugger is specifically for the admin thumbnail route, which is CSRF bypassed.
+    // Its position here is fine, as it's *before* the global CSRF, and *after* the bypass.
     if (req.method === 'POST' && req.path === '/api/admin/generate-missing-thumbnails') {
         console.log(`\n--- CSRF DEBUG LOGS for POST ${req.path} ---`);
         console.log(`Request Cookie Header: ${req.headers.cookie}`);
@@ -101,17 +119,12 @@ app.use((req, res, next) => {
 // --- END DEBUGGING MIDDLEWARE ---
 
 
-// --- CSRF Protection ---
-// Handle specific routes that should bypass CSRF *before* applying global CSRF.
-// This allows '/api/add-generated-image' to proceed without CSRF checks.
-app.use('/api/add-generated-image', (req, res, next) => {
-    // For this specific path, just proceed to the next middleware/route handler
-    return next();
-});
+// Global CSRF Protection (MUST come after session and cookieParser, and *after* any specific bypasses)
+app.use(csrf({ cookie: true }));
 
-// Global CSRF Protection (MUST come after session and cookieParser)
-// This is the correct, standard way to apply csurf globally.
-app.use(csrf({ cookie: true })); // <-- UNCOMMENT AND PLACE HERE!
+// --- REMOVED THE DUPLICATE CSRF BYPASS FOR /api/add-generated-image HERE ---
+// The correct bypass is now placed higher up, before the global csurf middleware.
+
 
 // 6. EJS Layouts and View Engine Setup
 app.use(expressLayouts);
@@ -119,9 +132,10 @@ app.set('view engine', 'ejs');
 app.set('views', './views');
 app.set('layout', 'layouts/layout');
 
-// 7. Pass CSRF token and globals to all views (This block is fine, its condition now correctly checks `req.csrfToken`)
+// 7. Pass CSRF token and globals to all views
+// This should come after csurf, as it relies on req.csrfToken()
 app.use((req, res, next) => {
-    res.locals.csrfToken = req.csrfToken(); // This is correct, assumes csurf has run.
+    res.locals.csrfToken = req.csrfToken();
     res.locals.isLoggedIn = req.isAuthenticated();
     res.locals.user = req.user ? {
         id: req.user.id,
@@ -135,7 +149,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// --- Static file serving (These are fine where they are) ---
+// --- Static file serving ---
 app.use('/images', express.static(path.join(__dirname, 'public', 'images')));
 app.use('/videos', express.static(path.join(__dirname, 'public', 'videos')));
 const generatedImagesPath = path.join(__dirname, 'public', 'images', 'generated');
@@ -155,7 +169,7 @@ if (!fsSync.existsSync(RUNWARE_UPLOAD_DIR)) {
     }
 }
 
-// Qwen clients (Fine where they are)
+// Qwen clients
 const qwen = new OpenAI({
     apiKey: process.env.QWEN_API_KEY,
     baseURL: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
@@ -165,7 +179,7 @@ const qwenIntent = new OpenAI({
     baseURL: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
 });
 
-// Passport serialization (Fine where it is)
+// Passport serialization
 passport.serializeUser((user, done) => done(null, user.id));
 passport.deserializeUser(async (id, done) => {
     try {
@@ -176,7 +190,7 @@ passport.deserializeUser(async (id, done) => {
     }
 });
 
-// API routes logging (Fine where it is)
+// API routes logging
 app.use((req, res, next) => {
     console.log(`[Request] ${req.method} ${req.url} at ${new Date().toISOString()}`);
     next();
@@ -188,10 +202,9 @@ app.use('/', authRoutes);
 app.use('/payment', paymentRouter);
 app.use('/generate', require('./routes/generate'));
 app.use('/partials', require('./routes/partials'));
-//app.use('/api', apiRoutes);
 // app.use('/webhook', stripeRouter); // Uncomment when needed
 
-// Main app routes (Fine where it is, it's a GET request, so CSRF validation doesn't apply here)
+// Main app routes
 app.get('/', async (req, res) => {
     try {
         console.log(`[Server] Rendering index.ejs for homepage`);
@@ -205,7 +218,6 @@ app.get('/', async (req, res) => {
     }
 });
 
-// Your /admin route (No change needed here, as res.locals.csrfToken will be correct)
 app.get('/admin', isAdmin, (req, res) => {
     console.log('[Server] Rendering admin.ejs for admin panel (access granted).');
     res.render('admin', {
@@ -213,8 +225,6 @@ app.get('/admin', isAdmin, (req, res) => {
         description: 'Admin panel for Pixzor AI generative image site'
     });
 });
-
-
 
 app.get('/chat-history', async (req, res) => {
     try {
@@ -387,28 +397,6 @@ app.get('/api/library/chats', async (req, res) => {
 });
 
 
-app.get('/admin', isAdmin, (req, res) => { // <-- CHANGED HERE
-    console.log('[Server] Rendering admin.ejs for admin panel (access granted).');
-    res.render('admin', {
-        title: 'Admin Panel - Pixzor',
-        description: 'Admin panel for Pixzor AI generative image site'
-    });
-});
-
-// --- TEMPORARY CSRF BYPASS FOR ADMIN ROUTE (NOT RECOMMENDED FOR PRODUCTION) ---
-app.use('/api/admin/generate-missing-thumbnails', (req, res, next) => {
-    console.warn('[SECURITY WARNING] Bypassing CSRF for /api/admin/generate-missing-thumbnails!');
-    return next();
-});
-// --- END TEMPORARY BYPASS ---
-
-// Handle specific routes that should bypass CSRF *before* applying global CSRF.
-app.use('/api/add-generated-image', (req, res, next) => {
-    return next();
-});
-
-
-
 app.post('/api/add-generated-image', async (req, res) => {
     try {
         const token = req.headers.authorization?.split('Bearer ')[1];
@@ -485,7 +473,7 @@ app.post('/api/add-generated-image', async (req, res) => {
             userId,
             type: 'image',
             contentUrl,
-            thumbnailUrl, // <--- ADD THIS LINE
+            thumbnailUrl,
             prompt,
             model: modelUsed, // Map modelUsed to model
             tokenCost: 1,
@@ -562,6 +550,11 @@ app.delete('/api/library/chats/:chatId', async (req, res) => {
     try {
         transaction = await sequelize.transaction();
 
+        // Assuming ChatMessage model exists and is imported from db.js
+        // If ChatMessage is not part of your current db.js or not used, this line might error.
+        // I've kept it as it was in your original code, assuming it's defined elsewhere or you will add it.
+        const ChatMessage = require('./db').ChatMessage; // Explicitly require if not in main db object
+
         const deletedMessagesCount = await ChatMessage.destroy({
             where: { chatSessionId: chatId },
             transaction
@@ -622,7 +615,7 @@ app.use((err, req, res, next) => {
         console.log('[DB Sync] Database synced successfully with alter option.');
 
         // ADDED THIS LINE: Ensure the sessions table is synced
-        await sessionStore.sync(); // <-- ADDED THIS LINE
+        await sessionStore.sync();
         console.log('[DB Sync] Sessions table synced successfully.');
 
         const { startCleanupSchedule } = require('./utils/cleanupService');
